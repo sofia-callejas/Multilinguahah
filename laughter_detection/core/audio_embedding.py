@@ -34,6 +34,44 @@ class BYOLa(LightningModule):
         audio_embedding = self.model(x)
         return audio_embedding
 
+class BYOLav2(LightningModule):
+    def __init__(self, root_dir: str = "ext/byol_a"):
+        super(BYOLav2, self).__init__()
+        self._root_dir = root_dir
+        config_path = osp.join(self._root_dir, "config.yaml")
+        self._config = load_yaml_config(config_path)
+        self.model = AudioNTT2020(d=self._config.feature_d)
+
+    def load_weights(self):
+        self.pretrained_path = osp.join(
+            self._root_dir,
+            "pretrained_weights/BYOLA-NTT2020d2048s64x96-2508171106-e100-bs256-lr0005-rs42.pth",
+        )
+        self.model.load_weight(self.pretrained_path, "cpu")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        audio_embedding = self.model(x)
+        return audio_embedding
+
+class BYOLaFinetuning(LightningModule):
+    def __init__(self, root_dir: str = "ext/byol_a"):
+        super(BYOLaFinetuning, self).__init__()
+        self._root_dir = root_dir
+        config_path = osp.join(self._root_dir, "config.yaml")
+        self._config = load_yaml_config(config_path)
+        self.model = AudioNTT2020(d=self._config.feature_d)
+
+    def load_weights(self):
+        self.pretrained_path = osp.join(
+            self._root_dir,
+            "pretrained_weights/encoder_ssl_finetuned.pth",
+        )
+        self.model.load_weight(self.pretrained_path, "cpu")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        audio_embedding = self.model(x)
+        return audio_embedding
+
 
 class Wav2CLIP(LightningModule):
     def __init__(self, root_dir: str = "ext/byol_a"):
@@ -76,8 +114,10 @@ class AudioEmbedder:
             accelerator="gpu",
             logger=False,
         )
+        
+        self.wav2clip_trainer = self.trainer 
 
-        if (self.model_name == "byola") or (self.model_name == "b+w"):
+        if self.model_name == "byola":
             self.byola_model = BYOLa(byol_dir)
             self.byola_model.load_weights()
             self.to_spectrogram = torchaudio.transforms.MelSpectrogram(
@@ -90,10 +130,60 @@ class AudioEmbedder:
                 f_max=self.byola_model._config.f_max,
             )
             self.normalizer = PrecomputedNorm([-5.4919195, 5.0389895])
+        
+        elif self.model_name == "byola-v2":
+            self.byola_model = BYOLav2(byol_dir)
+            self.byola_model.load_weights()
 
-        elif (self.model_name == "wav2clip") or (self.model_name == "b+w"):
+            self.to_spectrogram = torchaudio.transforms.MelSpectrogram(
+                sample_rate=self.byola_model._config.sample_rate,
+                n_fft=self.byola_model._config.n_fft,
+                win_length=self.byola_model._config.win_length,
+                hop_length=self.byola_model._config.hop_length,
+                n_mels=self.byola_model._config.n_mels,
+                f_min=self.byola_model._config.f_min,
+                f_max=self.byola_model._config.f_max,
+            )
+            self.normalizer = PrecomputedNorm([-5.4919195, 5.0389895])
+        
+        elif self.model_name == "byola-f":
+            self.byola_model = BYOLaFinetuning(byol_dir)
+            self.byola_model.load_weights()
+
+            self.to_spectrogram = torchaudio.transforms.MelSpectrogram(
+                sample_rate=self.byola_model._config.sample_rate,
+                n_fft=self.byola_model._config.n_fft,
+                win_length=self.byola_model._config.win_length,
+                hop_length=self.byola_model._config.hop_length,
+                n_mels=self.byola_model._config.n_mels,
+                f_min=self.byola_model._config.f_min,
+                f_max=self.byola_model._config.f_max,
+            )
+            self.normalizer = PrecomputedNorm([-5.4919195, 5.0389895])
+        
+        elif self.model_name.startswith("wav2clip"):
             self.wav2clip_model = Wav2CLIP()
-
+            self.wav2clip_trainer = Trainer(
+                devices=num_gpus,
+                accelerator="gpu",
+                logger=False,
+            )
+        
+        elif self.model_name.startswith("b+w"):
+            self.wav2clip_model = Wav2CLIP()
+            self.byola_model = BYOLa(byol_dir)
+            self.byola_model.load_weights()
+            self.to_spectrogram = torchaudio.transforms.MelSpectrogram(
+                sample_rate=self.byola_model._config.sample_rate,
+                n_fft=self.byola_model._config.n_fft,
+                win_length=self.byola_model._config.win_length,
+                hop_length=self.byola_model._config.hop_length,
+                n_mels=self.byola_model._config.n_mels,
+                f_min=self.byola_model._config.f_min,
+                f_max=self.byola_model._config.f_max,
+            )
+            self.normalizer = PrecomputedNorm([-5.4919195, 5.0389895])
+            
         else:
             raise NameError(f"No model named: {self.model_name}")
 
@@ -121,9 +211,14 @@ class AudioEmbedder:
         self, audio_segments: List[torch.Tensor], current_samplerate: float
     ) -> torch.Tensor:
         """Compute BYOL-a audio embedding given a list of audio tracks."""
+
+        if not audio_segments:
+            return torch.empty((0, 1280))
+
         processed_segments = self._preprocess_audio_byola(
             audio_segments, current_samplerate
         )
+        
         spec_loader = DataLoader(
             processed_segments,
             batch_size=1,
@@ -136,16 +231,21 @@ class AudioEmbedder:
 
     def _get_wav2clip(self, audio_segments: List[torch.Tensor]) -> torch.Tensor:
         """Compute Wav2CLIP audio embedding given a list of audio tracks."""
+        
+        if not audio_segments:
+            return torch.empty((0, 1280))
+    
         raw_loader = DataLoader(
             audio_segments,
             batch_size=1,
             num_workers=self.num_workers,
         )
+        
         wav2clip_embeddings = self.wav2clip_trainer.predict(
             self.wav2clip_model, raw_loader
         )
         wav2clip_embeddings = torch.stack(wav2clip_embeddings).squeeze().cpu()
-
+        
         return wav2clip_embeddings
 
     def get_audioembeddings(
@@ -155,16 +255,23 @@ class AudioEmbedder:
         save_filename: str = None,
     ) -> List[torch.Tensor]:
         """Compute audio embedding given a list of audio tracks."""
-        if self.model_name == "byola":
+        if self.model_name.startswith("byola"):
             audio_embeddings = self._get_byola(audio_segments, current_samplerate)
 
-        elif self.model_name == "wav2clip":
+        elif self.model_name.startswith("byola-v2"):
+            audio_embeddings = self._get_byola(audio_segments, current_samplerate)
+        
+        elif self.model_name.startswith("byola-f"):
+            audio_embeddings = self._get_byola(audio_segments, current_samplerate)
+        
+        elif self.model_name.startswith("wav2clip"):
             audio_embeddings = self._get_wav2clip(audio_segments)
 
-        elif self.model_name == "b+w":
+        elif self.model_name.startswith("b+w"):
             byola_embeddings = self._get_byola(audio_segments, current_samplerate)
             wav2clip_embeddings = self._get_wav2clip(audio_segments)
             audio_embeddings = torch.hstack([byola_embeddings, wav2clip_embeddings])
+
 
         if save_filename:
             torch.save(audio_embeddings, save_filename)

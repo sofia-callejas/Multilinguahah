@@ -10,7 +10,11 @@ import soundfile as sf
 import torch
 import torchaudio
 from tqdm import tqdm
+import sklearn_crfsuite
+from audio_separator.separator import Separator
 
+import librosa
+import soundfile as sf
 from laughter_detection.core.audio_embedding import AudioEmbedder
 
 
@@ -70,14 +74,87 @@ class LaughterDetector:
             num_gpus=num_gpus,
             verbose=verbose,
         )
+        
+
+    
+    def apply_mask_to_audio(audio_np, mask, n_frames, hop_length):
+        # Crear un array para la señal filtrada (inicializada en cero)
+        filtered_audio = np.zeros_like(audio_np)
+
+        # Para cada frame de la máscara, calcular su rango de muestras en la señal original
+        for i in range(n_frames):
+            start = i * hop_length
+            end = start + hop_length
+            if end > len(audio_np):
+                end = len(audio_np)
+        # Si la máscara es 1, copiamos ese segmento original al filtrado
+            if mask[i] == 1:
+                filtered_audio[start:end] = audio_np[start:end]
+
+        return filtered_audio
+    
 
     def _save_stereodiff(
-        self, raw_track: torch.Tensor, sample_rate: float, diff_path: str
+        self, raw_track: torch.Tensor, sample_rate: float, diff_path: str, name:str
     ):
         """Save the difference between stereo channels."""
-        diff_track = raw_track[0] - raw_track[1]
-        sf.write(diff_path, diff_track.numpy(), sample_rate)
+        #diff_track = (raw_track[1] + raw_track[0])/2
+        
+        self.sample_rate = sample_rate
+        #energy_threshold = 0.2
+        raw_track = np.mean(raw_track.numpy(), axis=0)
+        separator = Separator()
+        separator.load_model()
+        output_names = {
+            "Vocals": "vocals_output",
+            "Instrumental": name,
+        }
+        file= osp.join(self.raw_dir, name + ".wav")
+        outputs = separator.separate(file,output_names)
+        import shutil
 
+        shutil.move(name + ".wav", diff_path)
+        if os.path.exists("vocals_output.wav"):
+            os.remove("vocals_output.wav")
+
+
+        #stft = librosa.stft(raw_track, n_fft=2048, hop_length=512)
+        #magnitude = np.abs(stft)
+        #energy = np.sum(magnitude, axis=0)
+        #energy_norm = energy / np.max(energy)
+        
+        #def extract_features(energy_array):
+        #    return [{"energy": e} for e in energy_array]
+
+        #raw_labels = ["voice" if e > 0.2 else "noise" for e in energy_norm]
+
+        #crf = sklearn_crfsuite.CRF()
+        #X = [extract_features(energy_norm)]
+        #Y = [raw_labels]
+        #crf.fit(X, Y)
+        #smoothed_labels = crf.predict(X)[0]
+        
+        #mask = np.array([1 if label == "voice" else 0 for label in smoothed_labels])
+        #filtered_audio = np.zeros_like(raw_track)
+
+        # Para cada frame de la máscara, calcular su rango de muestras en la señal original
+        #for i, m in enumerate(mask):
+        #    if m:
+        #        start, end = i * 512, min((i + 1) * 512, len(raw_track))
+        #        filtered_audio[start:end] = raw_track[start:end]
+
+        #filtered_audio = filtered_audio.astype(np.float32)
+        
+        #filtered_audio = filtered_audio.T  # ahora shape será (18288866, 2)
+
+        # Asegúrate que los valores estén en float32 y entre -1 y 1
+        #if filtered_audio.dtype.kind == 'f':
+        #    max_val = np.max(np.abs(filtered_audio))
+        #    if max_val > 1:
+        #        filtered_audio = filtered_audio / max_val
+        #    filtered_audio = filtered_audio.astype(np.float32)
+        #sf.write(diff_path, filtered_audio, sample_rate)
+        
         self.sample_rate = sample_rate
 
     def _save_surroundleft(
@@ -121,7 +198,7 @@ class LaughterDetector:
         # Compute and save the difference between stereo channels
         if n_channels == 2:
             diff_path = osp.join(self.diff_dir, audio_filename[:-4] + ".wav")
-            self._save_stereodiff(raw_track, sample_rate, diff_path)
+            self._save_stereodiff(raw_track, sample_rate, diff_path,audio_filename[:-4])
             # Detect non-silent regions
             nonsilent_timecodes = self._detect_nonsilent(
                 diff_path, self.stereo_detection_threshold
@@ -168,6 +245,7 @@ class LaughterDetector:
             filenames.
         """
         audio_embeddings, nonsilent_timecodes, episode_filenames = [], [], []
+
         for audio_filename in tqdm(os.listdir(audio_dir)):
             # Detect non-silent timecodes
             current_nonsilent = self._get_nonsilent(audio_filename)
@@ -179,6 +257,7 @@ class LaughterDetector:
             embedding_filename = osp.join(
                 self.embedding_dir, audio_filename[:-4] + ".pt"
             )
+
             if osp.exists(embedding_filename):
                 current_embedding = torch.load(embedding_filename)
                 audio_embeddings.append(current_embedding)
@@ -191,9 +270,27 @@ class LaughterDetector:
             current_embedding = self.audio_embedder.get_audioembeddings(
                 raw_segments, self.sample_rate, embedding_filename
             )
+            
             audio_embeddings.append(current_embedding)
+        
+        target_dim = 2560
+        fixed_embeddings = []
 
-        audio_embeddings = torch.vstack(audio_embeddings)
+        for emb in audio_embeddings:
+            if emb.shape[0] == 0:
+                emb = torch.zeros((1, target_dim), device=emb.device, dtype=emb.dtype)
+    
+            elif emb.shape[-1] < target_dim:
+                pad_size = target_dim - emb.shape[1]
+                padding = torch.zeros((emb.shape[0], pad_size), device=emb.device, dtype=emb.dtype)
+                emb = torch.cat([emb, padding], dim=1)
+    
+            elif emb.shape[-1] > target_dim:
+                emb = emb[:, :target_dim]
+            
+            fixed_embeddings.append(emb)
+            
+        audio_embeddings = torch.vstack(fixed_embeddings)
 
         return audio_embeddings, nonsilent_timecodes, episode_filenames
 
@@ -233,6 +330,7 @@ class LaughterDetector:
         # Compute and save the difference between stereo channels
         if n_channels == 2:
             diff_path = osp.join(self.diff_dir, audio_filename)
+
             self._save_stereodiff(raw_track, sample_rate, diff_path)
             # Detect non-silent regions
             nonsilent_timecodes = self._detect_nonsilent(
@@ -285,6 +383,7 @@ class LaughterDetector:
             nonsilent_timecodes,
             episode_filenames,
         ) = self._get_embeddings(self.raw_dir)
+        print(audio_embeddings)
         # Cluster embeddings with k-means
         k_means = KMeans(n_clusters=self.n_clusters)
         cluster_results = k_means.fit_predict(audio_embeddings)
@@ -311,4 +410,5 @@ class LaughterDetector:
             merged_timecodes = self._merge_segments(timecodes)
             laughter_timecodes[filename] = merged_timecodes
 
+        print(dict(laughter_timecodes))
         return dict(laughter_timecodes)
