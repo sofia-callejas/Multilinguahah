@@ -1,3 +1,0 @@
-encoder: bert
-weight_path: bert-base-uncased
-n_dims: 1536
