@@ -61,7 +61,7 @@ Gemfile.lock
 
 /models
 /ext
-/data
+/test
 /outputs
 /checkpoints
 /results*
