@@ -26,8 +26,8 @@ def parse_arguments():
 if __name__ == "__main__":
     args = parse_arguments()
     root_dir = args.root_dir
-    diff_dir = os.path.join(root_dir, "diff")
-
+    parent_dir = os.path.dirname(root_dir) 
+    diff_dir = os.path.join(parent_dir, "diff")
     laughter_detector = VoiceRemover(root_dir)
 
     for filename in os.listdir(root_dir):

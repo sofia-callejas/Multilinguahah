@@ -31,7 +31,8 @@ class VoiceRemover:
         self.raw_dir = root_dir
 
         # Directory with difference of stereo audio tracks
-        self.diff_dir = osp.join(root_dir, "diff")
+        parent_dir = os.path.dirname(root_dir)  
+        self.diff_dir = os.path.join(parent_dir, "diff")
         if not osp.exists(self.diff_dir):
             os.makedirs(self.diff_dir)
 
