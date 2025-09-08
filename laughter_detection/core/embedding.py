@@ -156,12 +156,13 @@ class Embedding:
         """
         # Load raw audio tracks
         raw_path = osp.join(self.root_dir, audio_filename)
-        diff_path = osp.join(self.root_dir,"diff",audio_filename)
+        parent_dir = os.path.dirname(self.root_dir)
+        diff_path = osp.join(parent_dir,"diff",audio_filename)
         raw_track, sample_rate = torchaudio.load(raw_path)
         embedding_filename = osp.join(
-                self.embedding_dir + "_02", audio_filename[:-4] + ".pt"
+                self.embedding_dir , audio_filename[:-4] + ".pt"
             )
-        os.makedirs(self.embedding_dir + "_02", exist_ok=True)
+        os.makedirs(self.embedding_dir , exist_ok=True)
         self.sample_rate = sample_rate
         n_channels = raw_track.shape[0]
 
