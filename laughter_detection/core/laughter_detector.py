@@ -116,44 +116,6 @@ class LaughterDetector:
         shutil.move(name + ".wav", diff_path)
         if os.path.exists("vocals_output.wav"):
             os.remove("vocals_output.wav")
-
-
-        #stft = librosa.stft(raw_track, n_fft=2048, hop_length=512)
-        #magnitude = np.abs(stft)
-        #energy = np.sum(magnitude, axis=0)
-        #energy_norm = energy / np.max(energy)
-        
-        #def extract_features(energy_array):
-        #    return [{"energy": e} for e in energy_array]
-
-        #raw_labels = ["voice" if e > 0.2 else "noise" for e in energy_norm]
-
-        #crf = sklearn_crfsuite.CRF()
-        #X = [extract_features(energy_norm)]
-        #Y = [raw_labels]
-        #crf.fit(X, Y)
-        #smoothed_labels = crf.predict(X)[0]
-        
-        #mask = np.array([1 if label == "voice" else 0 for label in smoothed_labels])
-        #filtered_audio = np.zeros_like(raw_track)
-
-        # Para cada frame de la máscara, calcular su rango de muestras en la señal original
-        #for i, m in enumerate(mask):
-        #    if m:
-        #        start, end = i * 512, min((i + 1) * 512, len(raw_track))
-        #        filtered_audio[start:end] = raw_track[start:end]
-
-        #filtered_audio = filtered_audio.astype(np.float32)
-        
-        #filtered_audio = filtered_audio.T  # ahora shape será (18288866, 2)
-
-        # Asegúrate que los valores estén en float32 y entre -1 y 1
-        #if filtered_audio.dtype.kind == 'f':
-        #    max_val = np.max(np.abs(filtered_audio))
-        #    if max_val > 1:
-        #        filtered_audio = filtered_audio / max_val
-        #    filtered_audio = filtered_audio.astype(np.float32)
-        #sf.write(diff_path, filtered_audio, sample_rate)
         
         self.sample_rate = sample_rate
 
