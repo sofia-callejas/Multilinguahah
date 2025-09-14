@@ -8,6 +8,7 @@ laughter timecodes in the directory `root_dir/audio/laughter`.
 import argparse
 import os
 import os.path as osp
+import glob
 import pickle
 from sklearn.cluster import KMeans
 from sklearn.cluster import SpectralClustering
@@ -17,9 +18,18 @@ import torch
 import matplotlib.pyplot as plt
 
 from laughter_detection.core.embedding import Embedding
+from laughter_detection.core.voice_remover import VoiceRemover
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--root_dir",
+        "-data",
+        type=str,
+        help="path of the data",
+        default="~/data/train",
+    )
     parser.add_argument(
         "--embedding-name",
         "-e",
@@ -50,12 +60,50 @@ if __name__ == "__main__":
     embedding_name = args.embedding_name
     cluster_range = args.cluster_range
     cluster_method = args.method
-    root_dir = os.path.expanduser("~/data/all")
-    root_data = os.path.expanduser("~/data")
+    root_dir = args.root_dir
+    #create the cluster path
     cluster_path = os.path.join(root_dir,"elbow_analysis",embedding_name,cluster_method)
     os.makedirs(cluster_path, exist_ok=True)
 
+    #remove the voice of the languages 
 
+    for subdir, _, files in os.walk(root_dir):
+        if subdir.endswith("raw"):  # only process raw/ folders
+            lang_dir = os.path.dirname(subdir)         # e.g. data/train/cs
+            diff_dir = os.path.join(lang_dir, "diff")  # e.g. data/train/cs/diff
+            embedding_dir = os.path.join(lang_dir, "embedding")
+            os.makedirs(diff_dir, exist_ok=True)
+            os.makedirs(embedding_dir, exist_ok=True)
+
+            raw_files = [f for f in files if f.endswith(".wav")]
+            diff_files = [f for f in os.listdir(diff_dir) if f.endswith(".wav")]
+            embedding_files = [f for f in os.listdir(embedding_dir) if f.endswith(".pt")]
+
+            # quick check: skip if everything already processed
+            if len(raw_files) == len(diff_files):
+                print(f"Skipping {lang_dir}, all {len(raw_files)} files already processed")
+                continue
+            if len(raw_files) == len(embedding_files):
+                print(f"Skipping {lang_dir}, all {len(raw_files)} files already processed")
+                continue
+
+            # instantiate per language
+            remove_voice = VoiceRemover(subdir)
+            get_embeddings = Embedding(embedding_name, subdir)
+
+            for filename in raw_files:
+                input_path = os.path.join(subdir, filename)
+                diff_path = os.path.join(diff_dir, filename)
+
+                if not os.path.exists(diff_path):
+                    print(f"Processing {input_path} → {diff_path}")
+                    remove_voice._get_diff(audio_filename=filename)
+                    get_embeddings._get_embeddings(audio_filename=filename)
+
+
+    #create the embedding
+
+    exit()
     #cs
     embedding_list_train_cs = []
     embedding_list_test_cs = []

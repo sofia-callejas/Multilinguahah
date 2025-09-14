@@ -34,11 +34,12 @@ class Embedding:
         self.root_dir = root_dir
 
         # Directory with difference of stereo audio tracks
-        self.diff_dir = osp.join(root_dir,"diff")
+        parent_dir = os.path.dirname(self.root_dir)
+        self.diff_dir = osp.join(parent_dir,"diff")
         if not osp.exists(self.diff_dir):
             os.makedirs(self.diff_dir)
         # Directory with audi embedding vectors
-        self.embedding_dir = osp.join(root_dir, "embedding", embedding_name)
+        self.embedding_dir = osp.join(parent_dir, "embedding", embedding_name)
         if not osp.exists(self.embedding_dir):
             os.makedirs(self.embedding_dir)
 
@@ -49,10 +50,10 @@ class Embedding:
         # Maximum duration of continuous silence in an event
         self.max_silence = 0.1
         # Time offset to add before and after the detected segment
-        self.offset = 0.6
+        self.offset = 0.2
         # Detection threshold for stereo audio tracks
         #self.stereo_detection_threshold = 57
-        self.stereo_detection_threshold = 57
+        self.stereo_detection_threshold = 35
         #self.stereo_detection_threshold = 35
         # Detection threshold for surround audio tracks
         self.surround_detection_threshold = 45
