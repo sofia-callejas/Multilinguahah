@@ -31,6 +31,13 @@ def parse_arguments():
         default="~/data/train",
     )
     parser.add_argument(
+        "--labels_dir",
+        "-labels",
+        type=str,
+        help="path of the labels",
+        default="test",
+    )
+    parser.add_argument(
         "--embedding-name",
         "-e",
         type=str,
@@ -61,31 +68,23 @@ if __name__ == "__main__":
     cluster_range = args.cluster_range
     cluster_method = args.method
     root_dir = args.root_dir
-    #create the cluster path
+    labels_dir = args.labels_dir
+
     cluster_path = os.path.join(root_dir,"elbow_analysis",embedding_name,cluster_method)
     os.makedirs(cluster_path, exist_ok=True)
 
-    #remove the voice of the languages 
+    train_embeddings = []
 
     for subdir, _, files in os.walk(root_dir):
         if subdir.endswith("raw"):  # only process raw/ folders
             lang_dir = os.path.dirname(subdir)         # e.g. data/train/cs
+            lang_code = os.path.basename(lang_dir)
             diff_dir = os.path.join(lang_dir, "diff")  # e.g. data/train/cs/diff
-            embedding_dir = os.path.join(lang_dir, "embedding")
+            embedding_dir = os.path.join(lang_dir, "embedding",embedding_name)
             os.makedirs(diff_dir, exist_ok=True)
             os.makedirs(embedding_dir, exist_ok=True)
 
             raw_files = [f for f in files if f.endswith(".wav")]
-            diff_files = [f for f in os.listdir(diff_dir) if f.endswith(".wav")]
-            embedding_files = [f for f in os.listdir(embedding_dir) if f.endswith(".pt")]
-
-            # quick check: skip if everything already processed
-            if len(raw_files) == len(diff_files):
-                print(f"Skipping {lang_dir}, all {len(raw_files)} files already processed")
-                continue
-            if len(raw_files) == len(embedding_files):
-                print(f"Skipping {lang_dir}, all {len(raw_files)} files already processed")
-                continue
 
             # instantiate per language
             remove_voice = VoiceRemover(subdir)
@@ -94,268 +93,51 @@ if __name__ == "__main__":
             for filename in raw_files:
                 input_path = os.path.join(subdir, filename)
                 diff_path = os.path.join(diff_dir, filename)
+                embedding_path = os.path.join(embedding_dir, filename.replace(".wav", ".pt"))
 
                 if not os.path.exists(diff_path):
                     print(f"Processing {input_path} → {diff_path}")
                     remove_voice._get_diff(audio_filename=filename)
+                else:
+                    print(f"Diff already exists for {diff_path}")
+                
+                if not os.path.exists(embedding_path):
+                    print(f"Creating embedding for {filename}")
                     get_embeddings._get_embeddings(audio_filename=filename)
+                else:
+                    print(f"Embedding already exists for {embedding_path}")
 
+                embedding = torch.load(embedding_path)
 
-    #create the embedding
+                if len(embedding.shape) < 2:
+                    embedding = embedding.unsqueeze(0)
 
-    exit()
-    #cs
-    embedding_list_train_cs = []
-    embedding_list_test_cs = []
-    for filename in os.listdir(os.path.expanduser("~/data/cs")):
-        embedding_path_cs = os.path.join(os.path.expanduser("~/data/cs"), "embedding",embedding_name,filename[:-4] + ".pt")
-        if os.path.isfile(embedding_path_cs):
-            embedding = torch.load(embedding_path_cs)
-            if embedding_name.startswith("b+w"):
-                target_dim = 2560
-            elif embedding_name.startswith("byola"):
-                target_dim = 2480
-            elif embedding_name.startswith("wav2clip"):
-                target_dim = 512
-            if len(embedding.shape) < 2:
-                embedding = embedding.unsqueeze(0) 
-            if embedding.shape[1] < target_dim:
-                pad_size = target_dim - embedding.shape[1]
-                padding = torch.zeros((embedding.shape[0], pad_size), device=embedding.device, dtype=embedding.dtype)
-                embedding = torch.cat([embedding, padding], dim=1)
-            elif embedding.shape[1] > target_dim:
-                embedding = embedding[:, :target_dim]
-            
-            parts = os.path.normpath(os.path.expanduser("~/data/cs")).split(os.sep)
-            test_path = os.path.join(*parts[-2:],"audio","labels")
-            test_filenames = sorted(os.listdir(test_path))
-            test_labels = [osp.splitext(f)[0] for f in test_filenames]
+                if embedding_name.startswith("b+w"):
+                    target_dim = 2560
+                elif embedding_name.startswith("byola"):
+                    target_dim = 2480
+                elif embedding_name.startswith("wav2clip"):
+                    target_dim = 512
+                else:
+                    raise ValueError(f"Unknown embedding type: {embedding_name}")
 
-            if os.path.splitext(filename)[0] in test_labels:
-                embedding_list_test_cs.append(embedding)
-            else:
-                embedding_list_train_cs.append(embedding)
-    
-    #es 
-    embedding_list_train_es = []
-    embedding_list_test_es = []
-    for filename in os.listdir(os.path.expanduser("~/data/es")):
-        embedding_path_es = os.path.join(os.path.expanduser("~/data/es"), "embedding",embedding_name,filename[:-4] + ".pt")
-        if os.path.isfile(embedding_path_es):
-            embedding = torch.load(embedding_path_es)
-            if embedding_name.startswith("b+w"):
-                target_dim = 2560
-            elif embedding_name.startswith("byola"):
-                target_dim = 2480
-            elif embedding_name.startswith("wav2clip"):
-                target_dim = 512
-            if len(embedding.shape) < 2:
-                embedding = embedding.unsqueeze(0) 
-            if embedding.shape[1] < target_dim:
-                pad_size = target_dim - embedding.shape[1]
-                padding = torch.zeros((embedding.shape[0], pad_size), device=embedding.device, dtype=embedding.dtype)
-                embedding = torch.cat([embedding, padding], dim=1)
-            elif embedding.shape[1] > target_dim:
-                embedding = embedding[:, :target_dim]
-            
-            parts = os.path.normpath(os.path.expanduser(os.path.expanduser("~/data/es"))).split(os.sep)
-            test_path = os.path.join(*parts[-2:],"audio","labels")
-            test_filenames = sorted(os.listdir(test_path))
-            test_labels = [osp.splitext(f)[0] for f in test_filenames]
+                if embedding.shape[1] < target_dim:
+                    pad_size = target_dim - embedding.shape[1]
+                    padding = torch.zeros((embedding.shape[0], pad_size),
+                                      device=embedding.device,
+                                      dtype=embedding.dtype)
+                    embedding = torch.cat([embedding, padding], dim=1)
+                elif embedding.shape[1] > target_dim:
+                    embedding = embedding[:, :target_dim]
+                
+                test_labels_dir = os.path.join(labels_dir, lang_code, "audio","labels")
+                test_files = set(os.path.splitext(f)[0] for f in os.listdir(test_labels_dir) if f.endswith(".csv"))
+                print(test_files)
 
-            if os.path.splitext(filename)[0] in test_labels:
-                embedding_list_test_es.append(embedding)
-            else:
-                embedding_list_train_es.append(embedding)
+                if os.path.splitext(filename)[0] not in test_files:
+                    train_embeddings.append(embedding)
 
-#en_uk
-    embedding_list_train_en_uk = []
-    embedding_list_test_en_uk = []
-    for filename in os.listdir(os.path.expanduser("~/data/en_uk")):
-        embedding_path_es = os.path.join(os.path.expanduser("~/data/en_uk"), "embedding",embedding_name,filename[:-4] + ".pt")
-        if os.path.isfile(embedding_path_es):
-            embedding = torch.load(embedding_path_es)
-            if embedding_name.startswith("b+w"):
-                target_dim = 2560
-            elif embedding_name.startswith("byola"):
-                target_dim = 2480
-            elif embedding_name.startswith("wav2clip"):
-                target_dim = 512
-            if len(embedding.shape) < 2:
-                embedding = embedding.unsqueeze(0) 
-            if embedding.shape[1] < target_dim:
-                pad_size = target_dim - embedding.shape[1]
-                padding = torch.zeros((embedding.shape[0], pad_size), device=embedding.device, dtype=embedding.dtype)
-                embedding = torch.cat([embedding, padding], dim=1)
-            elif embedding.shape[1] > target_dim:
-                embedding = embedding[:, :target_dim]
-            
-            parts = os.path.normpath(os.path.expanduser("~/data/en_uk")).split(os.sep)
-            test_path = os.path.join(*parts[-2:],"audio","labels")
-            test_filenames = sorted(os.listdir(test_path))
-            test_labels = [osp.splitext(f)[0] for f in test_filenames]
-
-            if os.path.splitext(filename)[0] in test_labels:
-                embedding_list_test_en_uk.append(embedding)
-            else:
-                embedding_list_train_en_uk.append(embedding)     
-    
-#fr
-
-    embedding_list_train_fr = []
-    embedding_list_test_fr = []
-    for filename in os.listdir(os.path.expanduser("~/data/fr")):
-        embedding_path_es = os.path.join(os.path.expanduser("~/data/fr"), "embedding",embedding_name,filename[:-4] + ".pt")
-        if os.path.isfile(embedding_path_es):
-            embedding = torch.load(embedding_path_es)
-            if embedding_name.startswith("b+w"):
-                target_dim = 2560
-            elif embedding_name.startswith("byola"):
-                target_dim = 2480
-            elif embedding_name.startswith("wav2clip"):
-                target_dim = 512
-            if len(embedding.shape) < 2:
-                embedding = embedding.unsqueeze(0) 
-            if embedding.shape[1] < target_dim:
-                pad_size = target_dim - embedding.shape[1]
-                padding = torch.zeros((embedding.shape[0], pad_size), device=embedding.device, dtype=embedding.dtype)
-                embedding = torch.cat([embedding, padding], dim=1)
-            elif embedding.shape[1] > target_dim:
-                embedding = embedding[:, :target_dim]
-            
-            parts = os.path.normpath(os.path.expanduser("~/data/fr")).split(os.sep)
-            test_path = os.path.join(*parts[-2:],"audio","labels")
-            test_filenames = sorted(os.listdir(test_path))
-            test_labels = [osp.splitext(f)[0] for f in test_filenames]
-
-            if os.path.splitext(filename)[0] in test_labels:
-                embedding_list_test_fr.append(embedding)
-            else:
-                embedding_list_train_fr.append(embedding) 
-
-#hu
-
-    embedding_list_train_hu = []
-    embedding_list_test_hu = []
-    for filename in os.listdir(os.path.expanduser("~/data/hu")):
-        embedding_path_es = os.path.join(os.path.expanduser("~/data/hu"), "embedding",embedding_name,filename[:-4] + ".pt")
-        if os.path.isfile(embedding_path_es):
-            embedding = torch.load(embedding_path_es)
-            if embedding_name.startswith("b+w"):
-                target_dim = 2560
-            elif embedding_name.startswith("byola"):
-                target_dim = 2480
-            elif embedding_name.startswith("wav2clip"):
-                target_dim = 512
-            if len(embedding.shape) < 2:
-                embedding = embedding.unsqueeze(0) 
-            if embedding.shape[1] < target_dim:
-                pad_size = target_dim - embedding.shape[1]
-                padding = torch.zeros((embedding.shape[0], pad_size), device=embedding.device, dtype=embedding.dtype)
-                embedding = torch.cat([embedding, padding], dim=1)
-            elif embedding.shape[1] > target_dim:
-                embedding = embedding[:, :target_dim]
-            
-            parts = os.path.normpath(os.path.expanduser("~/data/hu")).split(os.sep)
-            test_path = os.path.join(*parts[-2:],"audio","labels")
-            test_filenames = sorted(os.listdir(test_path))
-            test_labels = [osp.splitext(f)[0] for f in test_filenames]
-
-            if os.path.splitext(filename)[0] in test_labels:
-                embedding_list_test_hu.append(embedding)
-            else:
-                embedding_list_train_hu.append(embedding)
-
-#pt
-
-    embedding_list_train_pt = []
-    embedding_list_test_pt = []
-    for filename in os.listdir(os.path.expanduser("~/data/pt")):
-        embedding_path_es = os.path.join(os.path.expanduser("~/data/pt"), "embedding",embedding_name,filename[:-4] + ".pt")
-        if os.path.isfile(embedding_path_es):
-            embedding = torch.load(embedding_path_es)
-            if embedding_name.startswith("b+w"):
-                target_dim = 2560
-            elif embedding_name.startswith("byola"):
-                target_dim = 2480
-            elif embedding_name.startswith("wav2clip"):
-                target_dim = 512
-            if len(embedding.shape) < 2:
-                embedding = embedding.unsqueeze(0) 
-            if embedding.shape[1] < target_dim:
-                pad_size = target_dim - embedding.shape[1]
-                padding = torch.zeros((embedding.shape[0], pad_size), device=embedding.device, dtype=embedding.dtype)
-                embedding = torch.cat([embedding, padding], dim=1)
-            elif embedding.shape[1] > target_dim:
-                embedding = embedding[:, :target_dim]
-            
-            parts = os.path.normpath(os.path.expanduser("~/data/pt")).split(os.sep)
-            test_path = os.path.join(*parts[-2:],"audio","labels")
-            test_filenames = sorted(os.listdir(test_path))
-            test_labels = [osp.splitext(f)[0] for f in test_filenames]
-
-            if os.path.splitext(filename)[0] in test_labels:
-                embedding_list_test_pt.append(embedding)
-            else:
-                embedding_list_train_pt.append(embedding)
-
-#it    
-    
-    embedding_list_train_it = []
-    embedding_list_test_it = []
-    for filename in os.listdir(os.path.expanduser("~/data/it")):
-        embedding_path_es = os.path.join(os.path.expanduser("~/data/it"), "embedding",embedding_name,filename[:-4] + ".pt")
-        if os.path.isfile(embedding_path_es):
-            embedding = torch.load(embedding_path_es)
-            if embedding_name.startswith("b+w"):
-                target_dim = 2560
-            elif embedding_name.startswith("byola"):
-                target_dim = 2480
-            elif embedding_name.startswith("wav2clip"):
-                target_dim = 512
-            if len(embedding.shape) < 2:
-                embedding = embedding.unsqueeze(0) 
-            if embedding.shape[1] < target_dim:
-                pad_size = target_dim - embedding.shape[1]
-                padding = torch.zeros((embedding.shape[0], pad_size), device=embedding.device, dtype=embedding.dtype)
-                embedding = torch.cat([embedding, padding], dim=1)
-            elif embedding.shape[1] > target_dim:
-                embedding = embedding[:, :target_dim]
-            
-            parts = os.path.normpath(os.path.expanduser("~/data/it")).split(os.sep)
-            test_path = os.path.join(*parts[-2:],"audio","labels")
-            test_filenames = sorted(os.listdir(test_path))
-            test_labels = [osp.splitext(f)[0] for f in test_filenames]
-
-            if os.path.splitext(filename)[0] in test_labels:
-                embedding_list_test_it.append(embedding)
-            else:
-                embedding_list_train_it.append(embedding)    
-    
-    
-    
-    embedding_list_train = [
-        *embedding_list_train_cs,
-        *embedding_list_train_es,
-        *embedding_list_train_en_uk,
-        *embedding_list_train_fr,
-        *embedding_list_train_hu,
-        *embedding_list_train_pt,
-        *embedding_list_train_it,
-    ]
-
-    embedding_list_test = [
-        *embedding_list_test_cs,
-        *embedding_list_test_es,
-        *embedding_list_test_en_uk,
-        *embedding_list_test_fr,
-        *embedding_list_test_hu,
-        *embedding_list_test_pt,
-        *embedding_list_test_it,
-    ]
-
-    train_audio_embeddings = torch.vstack(embedding_list_train)
-    test_audio_embeddings = torch.vstack(embedding_list_test)
+                train_audio_embeddings = torch.vstack(train_embeddings)
 
     inertias = []
     k_range = range(1, int(cluster_range))
@@ -430,4 +212,5 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig(os.path.join(cluster_path, "silhouette_plot.png"))
         plt.close()
-            
+
+
