@@ -21,6 +21,8 @@ import torch
 import matplotlib.pyplot as plt
 import joblib
 from laughter_detection.core.embedding import Embedding
+from laughter_detection.core.voice_remover import VoiceRemover
+
 
 def plot_projection(embeddings_2d, projection_name):
     plt.figure(figsize=(10, 7))
@@ -171,16 +173,12 @@ if __name__ == "__main__":
                 if not os.path.exists(diff_path):
                     print(f"Processing {input_path} → {diff_path}")
                     remove_voice._get_diff(audio_filename=filename)
-                else:
-                    print(f"Diff already exists for {diff_path}")
                 
                 if not os.path.exists(embedding_path):
-                    print(f"Creating embedding for {filename}")
+                    print(f"Creating embedding for {embedding_path}")
                     get_embeddings._get_embeddings(audio_filename=filename)
                     current_nonsilent = get_embeddings._get_nonsilent(filename)
                     current_filenames = [filename for _ in current_nonsilent]
-                else:
-                    print(f"Embedding already exists for {embedding_path}")
 
                 embedding = torch.load(embedding_path)
 
@@ -321,6 +319,11 @@ if __name__ == "__main__":
 
 
     pred_timecodes = dict(laughter_timecodes)
+    print(pred_timecodes)
+    print(current_filename)
+    print(current_timecodes)
+    exit()
+
 
     for current_filename, current_timecodes in pred_timecodes.items():
         laughter_filename = f"{current_filename[:-4]}.pk"

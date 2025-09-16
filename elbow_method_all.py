@@ -86,7 +86,6 @@ if __name__ == "__main__":
 
             raw_files = [f for f in files if f.endswith(".wav")]
 
-            # instantiate per language
             remove_voice = VoiceRemover(subdir)
             get_embeddings = Embedding(embedding_name, subdir)
 
@@ -98,14 +97,10 @@ if __name__ == "__main__":
                 if not os.path.exists(diff_path):
                     print(f"Processing {input_path} → {diff_path}")
                     remove_voice._get_diff(audio_filename=filename)
-                else:
-                    print(f"Diff already exists for {diff_path}")
                 
                 if not os.path.exists(embedding_path):
                     print(f"Creating embedding for {filename}")
                     get_embeddings._get_embeddings(audio_filename=filename)
-                else:
-                    print(f"Embedding already exists for {embedding_path}")
 
                 embedding = torch.load(embedding_path)
 
@@ -132,12 +127,11 @@ if __name__ == "__main__":
                 
                 test_labels_dir = os.path.join(labels_dir, lang_code, "audio","labels")
                 test_files = set(os.path.splitext(f)[0] for f in os.listdir(test_labels_dir) if f.endswith(".csv"))
-                print(test_files)
 
                 if os.path.splitext(filename)[0] not in test_files:
                     train_embeddings.append(embedding)
 
-                train_audio_embeddings = torch.vstack(train_embeddings)
+    train_audio_embeddings = torch.vstack(train_embeddings)
 
     inertias = []
     k_range = range(1, int(cluster_range))
