@@ -20,8 +20,26 @@ from umap import UMAP
 import torch
 import matplotlib.pyplot as plt
 import joblib
+from typing import Dict, List, Tuple
 from laughter_detection.core.embedding import Embedding
 from laughter_detection.core.voice_remover import VoiceRemover
+
+def merge_segments(segments: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
+    index, lenght = 0, len(segments)
+    while (lenght > 1) and (lenght - index > 1):
+    # Check if the two consecutive segment share a part
+        if max(segments[index]) >= min(segments[index + 1]):
+            new_segment = [min(segments[index]), max(segments[index + 1])]
+            # Add the merged segment and revove the originals
+            segments.pop(index)
+            segments.insert(index, new_segment)
+            segments.pop(index + 1)
+
+        else:
+            index += 1
+        lenght = len(segments)
+
+    return segments
 
 
 def plot_projection(embeddings_2d, projection_name):
@@ -144,6 +162,7 @@ if __name__ == "__main__":
     train_embeddings = []
     test_embeddings = []
     test_nonsilent_timecodes, test_episode_filenames = [], []
+    path_laughter_dir = []
 
 
     for subdir, _, files in os.walk(root_dir):
@@ -152,6 +171,7 @@ if __name__ == "__main__":
             lang_code = os.path.basename(lang_dir)
 
             laughter_dir = osp.join(root_dir, "laughter",lang_code, embedding_name, cluster_method)
+
             os.makedirs(laughter_dir, exist_ok=True)
 
             diff_dir = os.path.join(lang_dir, "diff")  # e.g. data/train/cs/diff
@@ -177,10 +197,10 @@ if __name__ == "__main__":
                 if not os.path.exists(embedding_path):
                     print(f"Creating embedding for {embedding_path}")
                     get_embeddings._get_embeddings(audio_filename=filename)
-                    current_nonsilent = get_embeddings._get_nonsilent(filename)
-                    current_filenames = [filename for _ in current_nonsilent]
 
                 embedding = torch.load(embedding_path)
+                current_nonsilent = get_embeddings._get_nonsilent(filename)
+                current_filenames = [filename for _ in current_nonsilent]
 
                 if len(embedding.shape) < 2:
                     embedding = embedding.unsqueeze(0)
@@ -207,21 +227,21 @@ if __name__ == "__main__":
                 test_files = set(os.path.splitext(f)[0] for f in os.listdir(test_labels_dir) if f.endswith(".csv"))
 
                 if os.path.splitext(filename)[0] in test_files:
+                    path_laughter_dir.append(laughter_dir)
                     test_embeddings.append(embedding)
                     test_nonsilent_timecodes.extend(current_nonsilent)      
                     test_episode_filenames.extend(current_filenames)
                 else:
                     train_embeddings.append(embedding)
 
-                train_audio_embeddings = torch.vstack(train_embeddings)
-                test_audio_embedding =  torch.vstack(test_embeddings)
+    train_audio_embeddings = torch.vstack(train_embeddings)
+    test_audio_embedding =  torch.vstack(test_embeddings)
 
     
     if cluster_method == "isolation":
         isolation = IsolationForest(contamination='auto', random_state=42)
         isolation.fit(train_audio_embeddings)
-        model_path = os.path.join(model_path, "isolation.joblib")
-        joblib.dump(isolation, model_path)
+        joblib.dump(isolation, os.path.join(model_path, "isolation.joblib"))
         preds = isolation.predict(train_audio_embeddings)
         cluster_results = np.array([0 if p == 1 else 1 for p in preds])
         centroids = None
@@ -237,7 +257,7 @@ if __name__ == "__main__":
 
     pca = PCA(n_components=2)
     embeddings_2d_pca = pca.fit_transform(train_audio_embeddings.cpu().numpy())
-    pca_dir = osp.join(laughter_dir,  "pca_model.joblib")
+    pca_dir = osp.join(model_path,  "pca_model.joblib")
     joblib.dump(pca, pca_dir)
     
     if cluster_method == "kmeans":
@@ -245,7 +265,7 @@ if __name__ == "__main__":
 
     umap_model = UMAP(n_components=2, random_state=42)
     embeddings_2d_umap = umap_model.fit_transform(embedding_np)
-    joblib.dump(umap_model, osp.join(laughter_dir, "umap_model.joblib"))
+    joblib.dump(umap_model, osp.join(model_path, "umap_model.joblib"))
 
     cluster_infos = []
 
@@ -275,26 +295,38 @@ if __name__ == "__main__":
     plot_projection(embeddings_2d_umap, "umap")
 
     #test
+    if cluster_method == "isolation":
+        centroids = None
+        isolation_model = joblib.load(os.path.join(model_path, "isolation.joblib"))
+        test_np = test_audio_embedding.cpu().numpy()
+        preds = isolation_model.predict(test_np)
+        cluster_results = np.array([0 if p == 1 else 1 for p in preds])
+        music_cluster_set = {1}
+
+        cluster_counts = Counter(cluster_results)
+        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
+        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
 
     plot_projection_test(
-        embeddings_2d=pca.transform(test_audio_embeddings.cpu().numpy()),
+        embeddings_2d=pca.transform(test_audio_embedding.cpu().numpy()),
         projection_name="pca",
         remapped_results=remapped_results,
         cluster_method=cluster_method,
         embedding_name=embedding_name,
-        laughter_dir=laughter_dir,
+        laughter_dir=model_path,
         centroids=centroids,
         projection_model=pca,
         music_cluster_set=music_cluster_set
     )
 
     plot_projection_test(
-        embeddings_2d=umap_model.transform(test_audio_embeddings.cpu().numpy()),
+        embeddings_2d=umap_model.transform(test_audio_embedding.cpu().numpy()),
         projection_name="umap",
         remapped_results=remapped_results,
         cluster_method=cluster_method,
         embedding_name=embedding_name,
-        laughter_dir=laughter_dir,
+        laughter_dir=model_path,
         centroids=centroids,
         projection_model=umap_model,
         music_cluster_set=music_cluster_set
@@ -312,22 +344,19 @@ if __name__ == "__main__":
         laughter_timecodes[filename].append(timecode)
 
     for filename, timecodes in laughter_timecodes.items():
-        merged_timecodes = laughter_detector._merge_segments(timecodes)
+        merged_timecodes = merge_segments(timecodes)
         laughter_timecodes[filename] = merged_timecodes
 
     print(dict(laughter_timecodes))
 
 
     pred_timecodes = dict(laughter_timecodes)
-    print(pred_timecodes)
-    print(current_filename)
-    print(current_timecodes)
-    exit()
 
 
-    for current_filename, current_timecodes in pred_timecodes.items():
+    for i, (current_filename, current_timecodes) in enumerate(pred_timecodes.items()):
         laughter_filename = f"{current_filename[:-4]}.pk"
-        laughter_path = osp.join(laughter_dir, laughter_filename)
+        path = path_laughter_dir[i]
+        laughter_path = osp.join(path, laughter_filename)
 
         # Save laughter timecodes
         with open(laughter_path, "wb") as f:
