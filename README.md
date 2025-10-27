@@ -55,76 +55,24 @@ from torch._six import container_abcs --> import collections.abc as container_ab
 from torch.nn.modules.linear import _LinearWithBias
 ```
 
-1. Download friends data:
-```
-gdown https://drive.google.com/drive/folders/1ZM6agmEnheiyP0IIrD3Fc7DOubjyu5eO -O ./data --folder
-```
-Note: label files are strutured as follow: [season, episode, funny-label, start, end]
-
-The dataset directory is organized as followed:
-```
-FunnyNet-data/
-└── tv_show_name/
-    ├── audio/
-    │   ├── diff/              # `.wav` files with stereo channel difference
-    │   ├── embedding/         # `.pt` files with audio embedding vectors
-    │   ├── laughter/          # `.pickle` files with laughter timecodes
-    │   ├── laughter_segment/  # `.wav` files with detected laughters
-    │   ├── left/              # `.wav` files with the surround left channel
-    │   └── raw/               # `.wav` files with extracted raw audio from videos
-    ├── laughter/              # `.pk` files with laughter labels
-    ├── sub/                   # `.pk` files with subtitles
-    ├── episode/               # `.mkv` files with videos
-    ├── audio_split/           # `.wav` files with audio 8 seconds windows
-    │   ├── test_8s/
-    │   ├── train_8s/
-    │   └── validation_8s/
-    ├── video_split/           # `.mp4` files with video 8 seconds windows
-    │   ├── test_8s/
-    │   ├── train_8s/
-    │   └── validation_8s/
-    └── sub_split/             # `.pk` files with subtitles 8 seconds windows
-        ├── sub_test_8s.pk
-        ├── sub_train_8s.pk
-        └── sub_validation_8s.pk
-```
-Note: we cannot provide audio and video data for obvious copyright issues.
-
-## FunnyNet
-
-### Data processing
-
-Split audio, subtitles and videos into segments of n seconds (default 8 seconds):
-```sh
-python data_processing/mask_audio.py DATA_DIR/audio/raw DATA_DIR/audio/laughter DATA_DIR/audio/processed
-python data_processing/audio_processing.py DATA_DIR/audio/raw DATA_DIR/laughter/xx.pk DATA_DIR/audio_split
-python data_processing/sub_processing.py DATA_DIR/sub DATA_DIR/laughter/xx.pk DATA_DIR/sub_split
-python data_processing/video_processing.py DATA_DIR/episode DATA_DIR/laughter/xx.pk DATA_DIR/video_split
-```
-
-### Training
-
-1. Train multimodality with audio and vision
-```sh
-python funnynet/train.py model.batch_size=BATCH_SIZE xp_name=XP_NAME data.data_dir=DATA_DIR model=avf-timesformer-byol-lstm data=avf-timesformer-byol-lstm
-```
-
-### Testing
-
-1. Test multimodality with audio and vision
-```sh
-python funnynet/evaluate.py
-```
-
-
 ## Laughter detection
 
-There is 4 scripts:
+### Remove voice
 
-- `laughter_detection/scripts/extract_audio.py`: extracts from video files contained in `episode/` corresponding audio tracks and saves them in `audio/raw/` .
+```sh
+python remove_voice.py DATA_DIR/audio/raw 
+```
 
-- `laughter_detection/scripts/detect_laughter.py`: detects laughters from audio files in `audio/raw/` and saves laughter timecodes as `.pickle` files in `audio/laughter/`.
+### Create audio embedding
+```sh
+python get_embedding.py DATA_DIR/audio/raw -e embedding_name
+```
 
-- `laughter_detection/scripts/extract_laughter.py`: extracts from raw audio segments in `audio/raw/` each detected laughter in `audio/laughter/` and saves them in `audio/laughter_segment/`.
+### byol-a (hydra based code)
 
-- `laughter_detection/scripts/evaluate_laughters.py`: given directories of predicted and ground-truth laughter files (`.pickle`), compare them and compute metrics.
+1. byola/config.yaml to change the config of the finetuning
+```sh
+python byola/finetuning.py
+```
+
+
