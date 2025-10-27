@@ -64,8 +64,9 @@ if __name__ == "__main__":
     not_missing_keys = set(pred_dict.keys()) - set(model_dict.keys())
 
     print(missing_keys)
+    print(len(missing_keys))
     print(not_missing_keys)
-
+    print(len(not_missing_keys))
     exit()
 
     temporal_scores, detect_scores = {}, defaultdict(list)
@@ -107,16 +108,7 @@ if __name__ == "__main__":
         output_file = os.path.join(output_dir, f"{clean_name}.csv")
         model_union_base_pred_paper.to_csv(output_file, index=False)
 
-    for missing_name in missing_keys:
-        model_timecodes = pd.read_csv(osp.join(model_dir, missing_name))
-        model_paper = model_timecodes.loc[model_timecodes["label"] == "risa", ["t0", "t1"]]
 
-        model_paper["source"] = "Added"
-        model_paper["label"] = "risa"
-
-        clean_name = missing_name.replace(".pk", "")
-        output_file = os.path.join(output_dir, f"{clean_name}.csv")
-        model_union_base_pred_paper.to_csv(output_file, index=False)
 
 
 

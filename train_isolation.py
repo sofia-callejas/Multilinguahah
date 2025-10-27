@@ -109,7 +109,6 @@ def plot_projection_test(
     plt.legend()
 
     plot_dir = osp.join(laughter_dir, "plots")
-    print(plot_dir)
     os.makedirs(plot_dir, exist_ok=True)
     plot_path = osp.join(plot_dir, f"laughter_clusters_{projection_name}.png")
     plt.savefig(plot_path)
@@ -163,6 +162,7 @@ if __name__ == "__main__":
     test_embeddings = []
     test_nonsilent_timecodes, test_episode_filenames = [], []
     path_laughter_dir = []
+    filename_to_laughter_dir = {}
 
 
     for subdir, _, files in os.walk(root_dir):
@@ -228,6 +228,7 @@ if __name__ == "__main__":
 
                 if os.path.splitext(filename)[0] in test_files:
                     path_laughter_dir.append(laughter_dir)
+                    filename_to_laughter_dir[filename] = laughter_dir
                     test_embeddings.append(embedding)
                     test_nonsilent_timecodes.extend(current_nonsilent)      
                     test_episode_filenames.extend(current_filenames)
@@ -287,7 +288,7 @@ if __name__ == "__main__":
             "points_umap": cluster_points_umap.tolist(),
         })
     
-    cluster_info_path = osp.join(laughter_dir, f"clusters_{cluster_method}.json")
+    cluster_info_path = osp.join(model_path, f"clusters_{cluster_method}.json")
     with open(cluster_info_path, "w") as f:
         json.dump(cluster_infos, f, indent=2)
 
@@ -355,10 +356,25 @@ if __name__ == "__main__":
 
     for i, (current_filename, current_timecodes) in enumerate(pred_timecodes.items()):
         laughter_filename = f"{current_filename[:-4]}.pk"
-        path = path_laughter_dir[i]
-        laughter_path = osp.join(path, laughter_filename)
+        from pathlib import Path
+        laughter_dir = filename_to_laughter_dir.get(current_filename)
+        if laughter_dir is None:
+            print(f"Warning: No laughter directory found for file {current_filename}. Skipping.")
+            continue
 
-        # Save laughter timecodes
+        path = path_laughter_dir[i]
+        path_ = Path(path_laughter_dir[i])
+        laughter_path = osp.join(laughter_dir, laughter_filename)
+
+        parts = Path(laughter_path).parts
+        lang_index = parts.index("laughter") + 1
+        language = parts[lang_index]
+        filename = Path(laughter_path).with_suffix(".csv").name
+
+        new_path = Path("test") / language / "audio" / "labels" / filename
+        if not new_path.exists():
+            print(new_path) 
+
         with open(laughter_path, "wb") as f:
             pickle.dump(current_timecodes, f)
 

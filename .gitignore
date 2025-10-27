@@ -59,6 +59,7 @@ Gemfile.lock
 
 .DS_Store
 
+/models/checkpoints
 /models
 /ext
 /test

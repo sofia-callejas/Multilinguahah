@@ -50,6 +50,7 @@ class Embedding:
         # Maximum duration of continuous silence in an event
         self.max_silence = 0.1
         # Time offset to add before and after the detected segment
+        #0.2
         self.offset = 0.2
         # Detection threshold for stereo audio tracks
         #self.stereo_detection_threshold = 57

@@ -31,6 +31,9 @@ def parse_arguments():
     parser.add_argument(
         "iou_threshold", type=float, help="iou_threshold"
     )
+    parser.add_argument(
+        "model_type", type=str, help="isolation"
+    )
     args = parser.parse_args()
 
     return args
@@ -155,6 +158,7 @@ if __name__ == "__main__":
     model_dir = args.model_dir
     language = args.language
     output_dir = args.output_dir
+    model_type = args.model_type
     iou_threshold = args.iou_threshold
 
     os.makedirs(output_dir, exist_ok=True)
@@ -190,52 +194,84 @@ if __name__ == "__main__":
     FP_all_union_paper = 0
     FN_all_union_paper = 0
 
-    TP_all_union_pred = 0
-    FP_all_union_pred = 0
-    FN_all_union_pred = 0
+    TP_all_union_pred_base_paper = 0
+    FP_all_union_pred_base_paper = 0
+    FN_all_union_pred_base_paper = 0
+
+    TP_all_union_pred_base_baseline = 0
+    FP_all_union_pred_base_baseline = 0
+    FN_all_union_pred_base_baseline = 0
+
+    TP_all_union_baseline = 0
+    FP_all_union_baseline = 0
+    FN_all_union_baseline = 0
     
     for key in sorted(common_keys):
         pred_name = pred_dict[key]
         label_name = label_dict[key]
         model_name = model_dict[key]
 
+
         pred_timecodes = load_preds(osp.join(pred_dir, pred_name))
         pred_timecodes = convertir_en_tuples(pred_timecodes)
 
-        true_timecodes = pd.read_csv(osp.join(label_dir, label_name),delimiter=";")
+        true_timecodes = pd.read_csv(osp.join(label_dir, label_name))
 
         model_timecodes = pd.read_csv(osp.join(model_dir, model_name))
         model_baseline = model_timecodes.loc[model_timecodes["source"] == "Initial", ["t0", "t1"]]
-        model_paper = model_timecodes.loc[:, ["t0", "t1"]]
+        #model_baseline = model_timecodes
+        #model_paper = model_timecodes
+        model_paper = model_timecodes.loc[model_timecodes["label"] == "risa", ["t0", "t1"]]
 
         df_pred = pd.DataFrame(pred_timecodes, columns=["t0", "t1"])
         pred_timecodes = df_pred.copy()
 
-        base_pred_intervals = list(zip(df_pred["t0"].tolist(), df_pred["t1"].tolist()))
-        df_pred_filtered_base_model = model_paper[~model_paper.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_pred_intervals), axis=1)]
+        base_pred_intervals_paper = list(zip(df_pred["t0"].tolist(), df_pred["t1"].tolist()))
+        df_pred_filtered_base_model = model_paper[~model_paper.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_pred_intervals_paper), axis=1)]
+
+        base_pred_intervals_baseline = list(zip(df_pred["t0"].tolist(), df_pred["t1"].tolist()))
+        df_pred_filtered_base_baseline = model_baseline[~model_baseline.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_pred_intervals_baseline), axis=1)]
 
         base_paper_intervals = list(zip(model_paper["t0"].tolist(), model_paper["t1"].tolist()))
         df_model_filtered_base_paper = df_pred[~df_pred.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_paper_intervals), axis=1)]
 
+        base_baseline_intervals = list(zip(model_baseline["t0"].tolist(), model_baseline["t1"].tolist()))
+        df_model_filtered_base_baseline = df_pred[~df_pred.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_baseline_intervals), axis=1)] 
+
+
         model_union_base_paper = pd.concat([model_paper, df_model_filtered_base_paper], ignore_index=True)
-        model_union_base_pred = pd.concat([df_pred, df_pred_filtered_base_model], ignore_index=True)
+        model_union_base_pred_paper = pd.concat([df_pred, df_pred_filtered_base_model], ignore_index=True)
+        model_union_base_pred_baseline = pd.concat([df_pred, df_pred_filtered_base_baseline], ignore_index=True)
+        model_union_base_baseline = pd.concat([model_baseline, df_model_filtered_base_baseline], ignore_index=True)
 
         model_baseline = df_en_tuples(model_baseline)
         model_paper = df_en_tuples(model_paper)
         true_timecodes = df_en_tuples(true_timecodes)
         pred_timecodes = df_en_tuples(pred_timecodes)
         model_union_base_paper = df_en_tuples(model_union_base_paper)
-        model_union_base_pred = df_en_tuples(model_union_base_pred)
+        model_union_base_pred_paper = df_en_tuples(model_union_base_pred_paper)
+        model_union_base_pred_baseline = df_en_tuples(model_union_base_pred_baseline)
+        model_union_base_baseline = df_en_tuples(model_union_base_baseline)
 
         TP_union_paper, FP_union_paper, FN_union_paper, not_matched_union = evaluate_predictions_with_iou(model_union_base_paper, true_timecodes, iou_threshold)
         TP_all_union_paper += TP_union_paper
         FP_all_union_paper += FP_union_paper
         FN_all_union_paper += FN_union_paper
+
+        TP_union_baseline, FP_union_baseline, FN_union_baseline, not_matched_union = evaluate_predictions_with_iou(model_union_base_baseline, true_timecodes, iou_threshold)
+        TP_all_union_baseline += TP_union_baseline
+        FP_all_union_baseline += FP_union_baseline
+        FN_all_union_baseline += FN_union_baseline
         
-        TP_union_pred, FP_union_pred, FN_union_pred, not_matched_union = evaluate_predictions_with_iou(model_union_base_pred, true_timecodes, iou_threshold)
-        TP_all_union_pred += TP_union_pred
-        FP_all_union_pred += FP_union_pred
-        FN_all_union_pred += FN_union_pred
+        TP_union_pred_base_paper, FP_union_pred_base_paper, FN_union_pred_base_paper, not_matched_union = evaluate_predictions_with_iou(model_union_base_pred_paper, true_timecodes, iou_threshold)
+        TP_all_union_pred_base_paper += TP_union_pred_base_paper
+        FP_all_union_pred_base_paper += FP_union_pred_base_paper
+        FN_all_union_pred_base_paper += FN_union_pred_base_paper
+
+        TP_union_pred_base_baseline, FP_union_pred_base_baseline, FN_union_pred_base_baseline, not_matched_union = evaluate_predictions_with_iou(model_union_base_pred_baseline, true_timecodes, iou_threshold)
+        TP_all_union_pred_base_baseline += TP_union_pred_base_baseline
+        FP_all_union_pred_base_baseline += FP_union_pred_base_baseline
+        FN_all_union_pred_base_baseline += FN_union_pred_base_baseline
 
         TP_paper, FP_paper, FN_paper, not_matched_paper = evaluate_predictions_with_iou(model_paper, true_timecodes, iou_threshold)
         TP_all_paper += TP_paper
@@ -255,7 +291,12 @@ if __name__ == "__main__":
     precision_paper, recall_paper, accuracy_paper, f1_paper= calculate_metrics(TP_all_paper, FP_all_paper, FN_all_paper)   
     precision_baseline, recall_baseline, accuracy_baseline, f1_baseline= calculate_metrics(TP_all_baseline, FP_all_baseline, FN_all_baseline)
     precision_union_paper, recall_union_paper, accuracy_union_paper, f1_union_paper= calculate_metrics(TP_all_union_paper, FP_all_union_paper, FN_all_union_paper)
-    precision_union_pred, recall_union_pred, accuracy_union_pred, f1_union_pred= calculate_metrics(TP_all_union_pred, FP_all_union_pred, FN_all_union_pred)
+
+    precision_union_pred_base_paper, recall_union_pred_base_paper, accuracy_union_pred_base_paper, f1_union_pred_base_paper= calculate_metrics(TP_all_union_pred_base_paper, FP_all_union_pred_base_paper, FN_all_union_pred_base_paper)
+    precision_union_pred_base_baseline, recall_union_pred_base_baseline, accuracy_union_pred_base_baseline, f1_union_pred_base_baseline= calculate_metrics(TP_all_union_pred_base_baseline, FP_all_union_pred_base_baseline, FN_all_union_pred_base_baseline)
+
+    precision_union_baseline, recall_union_baseline, accuracy_union_baseline, f1_union_baseline= calculate_metrics(TP_all_union_baseline, FP_all_union_baseline, FN_all_union_baseline)
+
 
     precision, recall, accuracy, f1= calculate_metrics(TP_all, FP_all, FN_all)   
    
@@ -281,7 +322,7 @@ results = {
         "FP": FP_all_baseline,
         "FN": FN_all_baseline
     },
-    "isolation": {
+    str(model_type): {
         "precision": precision,
         "recall": recall,
         "accuracy": accuracy,
@@ -299,14 +340,32 @@ results = {
         "FP": FP_all_union_paper,
         "FN": FN_all_union_paper
     },
-    "union_pred": {
-        "precision": precision_union_pred,
-        "recall": recall_union_pred,
-        "accuracy": accuracy_union_pred,
-        "F1": f1_union_pred,
-        "TP": TP_all_union_pred,
-        "FP": FP_all_union_pred,
-        "FN": FN_all_union_pred
+    "union_pred_base_paper": {
+        "precision": precision_union_pred_base_paper,
+        "recall": recall_union_pred_base_paper,
+        "accuracy": accuracy_union_pred_base_paper,
+        "F1": f1_union_pred_base_paper,
+        "TP": TP_all_union_pred_base_paper,
+        "FP": FP_all_union_pred_base_paper,
+        "FN": FN_all_union_pred_base_paper
+    },
+        "union_pred_base_baseline": {
+        "precision": precision_union_pred_base_baseline,
+        "recall": recall_union_pred_base_baseline,
+        "accuracy": accuracy_union_pred_base_baseline,
+        "F1": f1_union_pred_base_baseline,
+        "TP": TP_all_union_pred_base_baseline,
+        "FP": FP_all_union_pred_base_baseline,
+        "FN": FN_all_union_pred_base_baseline
+    },
+        "union_baseline": {
+        "precision": precision_union_baseline,
+        "recall": recall_union_baseline,
+        "accuracy": accuracy_union_baseline,
+        "F1": f1_union_baseline,
+        "TP": TP_all_union_baseline,
+        "FP": FP_all_union_baseline,
+        "FN": FN_all_union_baseline
     }
 }
 
@@ -317,7 +376,7 @@ output_file = os.path.join(output_dir, "metrics.csv")
 df_new = df_results.copy()
 df_new["language"] = language
 df_new["oui_threshold"] = iou_threshold
-df_new["method"] = df_new.index  # keep paper / baseline / ours explicitly
+df_new["method"] = df_new.index 
 df_new = df_new.reset_index(drop=True)
 
 if os.path.exists(output_file):
@@ -330,6 +389,8 @@ if os.path.exists(output_file):
     )
 else:
     df_db = df_new
+
+#print(df_db[df_db["language"]=="en_uk"])
 
 print(df_db)
 df_db.to_csv(output_file, index=False)
