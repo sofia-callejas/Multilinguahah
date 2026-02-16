@@ -97,7 +97,7 @@ if __name__ == "__main__":
             os.makedirs(diff_dir, exist_ok=True)
             os.makedirs(embedding_dir, exist_ok=True)
             test_labels_dir = os.path.join(labels_dir, lang_code, "audio","labels")
-            test_files = set(os.path.splitext(f)[0] for f in os.listdir(test_labels_dir) if f.endswith(".csv"))
+            #test_files = set(os.path.splitext(f)[0] for f in os.listdir(test_labels_dir) if f.endswith(".csv"))
 
             raw_files = [f for f in files if f.endswith(".wav")]
 
@@ -129,6 +129,8 @@ if __name__ == "__main__":
                     target_dim = 2560
                 elif embedding_name.startswith("byola"):
                     target_dim = 2480
+                elif embedding_name.startswith("audioset"):
+                    target_dim = 2480
                 elif embedding_name.startswith("wav2clip"):
                     target_dim = 512
                 else:
@@ -151,13 +153,29 @@ if __name__ == "__main__":
 
     train_audio_embeddings = torch.vstack(train_embeddings)
 
-    # Load clustering model
     if cluster_method == "isolation":
         isolation_model = joblib.load(os.path.join(model_path, "isolation.joblib"))
         test_np = train_audio_embeddings.cpu().numpy()
         preds = isolation_model.predict(test_np)
         cluster_results = np.array([0 if p == 1 else 1 for p in preds])
         music_cluster_set = {1}
+        cluster_counts = Counter(cluster_results)
+        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
+        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
+
+    elif cluster_method == "funnynet":
+        clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))
+        test_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
+        cluster_labels = clusterer.predict(test_np)
+        cluster_counts = Counter(cluster_labels)
+        largest_cluster = max(cluster_counts, key=cluster_counts.get)
+        cluster_results = np.array([
+            1 if lbl == largest_cluster else 0
+            for lbl in cluster_labels
+        ])
+        music_cluster_set = {1}
+
         cluster_counts = Counter(cluster_results)
         sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
         cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
