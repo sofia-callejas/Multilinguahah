@@ -9,7 +9,7 @@
 /test/tmp/
 /test/version_tmp/
 /tmp/
-/python-audio-separator
+
 
 # Used by dotenv library to load environment variables.
 # .env
@@ -63,6 +63,7 @@ Gemfile.lock
 /models/checkpoints
 /models
 /ext
+/python-audio-separator
 /test
 /outputs
 /checkpoints
