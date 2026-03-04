@@ -128,7 +128,7 @@ def parse_arguments():
         "-labels",
         type=str,
         help="path of the labels",
-        default="test",
+        default="/home/vbarrier/data/standup/laughter_detection/test_laughters_manual_annotation",
     )
     parser.add_argument(
         "--embedding-name",
@@ -178,7 +178,7 @@ if __name__ == "__main__":
             embedding_dir = os.path.join(lang_dir, "embedding",embedding_name)
             os.makedirs(diff_dir, exist_ok=True)
             os.makedirs(embedding_dir, exist_ok=True)
-            test_labels_dir = os.path.join(labels_dir, lang_code, "audio","labels")
+            test_labels_dir = os.path.join(labels_dir, lang_code)
             test_files = set(os.path.splitext(f)[0] for f in os.listdir(test_labels_dir) if f.endswith(".csv"))
 
             raw_files = [f for f in files if f.endswith(".wav")]

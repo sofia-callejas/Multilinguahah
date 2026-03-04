@@ -255,6 +255,7 @@ if __name__ == "__main__":
     args = parse_arguments()
     pred_dir = args.pred_dir
     label_dir = args.label_dir
+    print(label_dir)
     model_dir = args.model_dir
     output_dir = args.output_dir
     model_type = args.model_type

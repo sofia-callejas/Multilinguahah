@@ -319,7 +319,7 @@ if __name__ == "__main__":
         from sklearn.preprocessing import StandardScaler
         scaler = StandardScaler()
         embeddings_norm = scaler.fit_transform(train_audio_embeddings.cpu().numpy())
-        isolation = IsolationForest(n_estimators=100, contamination=0.1, random_state=42)
+        isolation = IsolationForest(n_estimators=100, contamination="auto", random_state=42)
         isolation.fit(embeddings_norm)
         joblib.dump(isolation, os.path.join(model_path, "isolation.joblib"))
         preds = isolation.predict(embeddings_norm)
@@ -365,7 +365,7 @@ if __name__ == "__main__":
         joblib.dump(cluster_map, os.path.join(model_path, "kmeans_cluster_map.joblib"))
     
     elif cluster_method == "funnynet":
-        clusterer = KMeans(n_clusters=3, random_state=42)
+        clusterer = KMeans(n_clusters=4, random_state=42)
         train_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
         cluster_labels = clusterer.fit_predict(train_np)
         centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(3)])

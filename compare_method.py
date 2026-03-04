@@ -282,6 +282,8 @@ if __name__ == "__main__":
     label_dict = {osp.splitext(f)[0]: f for f in label_filenames}
     model_dict = {osp.splitext(f)[0]: f for f in model_filenames}
 
+    
+
     common_keys = set(pred_dict.keys()) & set(label_dict.keys())
 
     temporal_scores = {}
@@ -339,10 +341,12 @@ if __name__ == "__main__":
         model_name = model_dict[key]
 
 
-        pred_timecodes = load_preds(osp.join(pred_dir, pred_name))
-        pred_timecodes = convertir_en_tuples(pred_timecodes)
+
+        #pred_timecodes = load_preds(osp.join(pred_dir, pred_name))
+        #pred_timecodes = convertir_en_tuples(pred_timecodes)
 
         #pred_timecodes = json_to_segments_df(osp.join(pred_dir, pred_name))
+        pred_timecodes = pd.read_csv(osp.join(pred_dir, pred_name))
         with open(osp.join(label_dir, label_name), "r", encoding="utf-8") as f:
             import csv
             sample = f.read(2048)  # small sample
@@ -357,8 +361,8 @@ if __name__ == "__main__":
         #model_paper = model_timecodes
         model_paper = model_timecodes.loc[model_timecodes["label"] == "risa", ["t0", "t1"]]
 
-        df_pred = pd.DataFrame(pred_timecodes, columns=["t0", "t1"])
-        pred_timecodes = df_pred.copy()
+        #df_pred = pd.DataFrame(pred_timecodes, columns=["t0", "t1"])
+        df_pred = pred_timecodes.copy()
 
         base_pred_intervals_paper = list(zip(df_pred["t0"].tolist(), df_pred["t1"].tolist()))
         df_pred_filtered_base_model = model_paper[~model_paper.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_pred_intervals_paper), axis=1)]
@@ -601,7 +605,7 @@ if os.path.exists(output_file):
 else:
     df_db = df_new
 
-df_final = df_db[df_db["language"]=="hu"][["F1","recall","mae_start","mae end","language","oui_threshold","method"]]
+df_final = df_db[df_db["language"]=="en_uk"][["F1","precision","mae_start","mae end","language","oui_threshold","method"]]
 
 print(df_final)
 

@@ -51,18 +51,31 @@ class LaughterDetector:
             os.makedirs(self.embedding_dir)
 
         # Minimum duration of a valid audio event in seconds
-        self.min_dur = 0.8
+        self.min_dur = 0.3
         # Maximum duration of an event
-        self.max_dur = 11
+        self.max_dur = 30
         # Maximum duration of continuous silence in an event
         self.max_silence = 0.1
         # Time offset to add before and after the detected segment
-        self.offset = 0.6
+        #0.2
+        self.offset = 0
         # Detection threshold for stereo audio tracks
-        self.stereo_detection_threshold = 57
+        self.stereo_detection_threshold = 35
+        #self.stereo_detection_threshold = 35
         # Detection threshold for surround audio tracks
-        self.surround_detection_threshold = 45
+        #self.surround_detection_threshold = 45
         # Number of clusters (audio embedding)
+        #self.min_dur = 0.3
+        # Maximum duration of an event
+        #self.max_dur = 30
+        # Maximum duration of continuous silence in an event
+        #self.max_silence = 0.1
+        # Time offset to add before and after the detected segment
+        #self.offset = 0.0
+        # Detection threshold for stereo audio tracks
+        #self.stereo_detection_threshold = 35
+        # Detection threshold for surround audio tracks
+        #self.surround_detection_threshold = 45
         self.n_clusters = n_clusters
 
         # Initilaize the audio embedder

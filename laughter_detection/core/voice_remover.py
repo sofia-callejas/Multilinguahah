@@ -80,21 +80,21 @@ class VoiceRemover:
         
         
         self.sample_rate = sample_rate
-        TARGET_SECONDS = 10
-        target_len = TARGET_SECONDS * self.sample_rate
+        #TARGET_SECONDS = 10
+        #target_len = TARGET_SECONDS * self.sample_rate
         raw_track = np.mean(raw_track.numpy(), axis=0)
         current_len = raw_track.shape[0]
-        if current_len < target_len:
-            pad_len = target_len - current_len
-            raw_track = np.pad(raw_track, (0, pad_len), mode="constant")
-        def pad_to_multiple(x, multiple):
-            remainder = x.shape[0] % multiple
-            if remainder == 0:
-                return x
-            pad_len = multiple - remainder
-            return np.pad(x, (0, pad_len), mode="constant")
+        #if current_len < target_len:
+        #    pad_len = target_len - current_len
+        #    raw_track = np.pad(raw_track, (0, pad_len), mode="constant")
+        #def pad_to_multiple(x, multiple):
+        #    remainder = x.shape[0] % multiple
+        #    if remainder == 0:
+        #        return x
+        #    pad_len = multiple - remainder
+        #    return np.pad(x, (0, pad_len), mode="constant")
 
-        raw_track = pad_to_multiple(raw_track, multiple=1024) 
+        #raw_track = pad_to_multiple(raw_track, multiple=1024) 
         temp_file = os.path.join(self.raw_dir, name + ".wav")
 
         sf.write(temp_file, raw_track, self.sample_rate)

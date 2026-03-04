@@ -11,7 +11,7 @@ import torch
 import torchaudio
 from tqdm import tqdm
 import sklearn_crfsuite
-#from audio_separator.separator import Separator
+from audio_separator.separator import Separator
 
 import librosa
 import soundfile as sf
@@ -43,23 +43,17 @@ class Embedding:
         if not osp.exists(self.embedding_dir):
             os.makedirs(self.embedding_dir)
 
-        # Minimum duration of a valid audio event in seconds
-        self.min_dur = 0.8
+
+        self.min_dur = 0.3
         # Maximum duration of an event
-        self.max_dur = 11
+        self.max_dur = 30
         # Maximum duration of continuous silence in an event
         self.max_silence = 0.1
         # Time offset to add before and after the detected segment
-        #0.2
-        self.offset = 0.2
+        self.offset = 0
         # Detection threshold for stereo audio tracks
-        #self.stereo_detection_threshold = 57
         self.stereo_detection_threshold = 35
-        #self.stereo_detection_threshold = 35
-        # Detection threshold for surround audio tracks
-        self.surround_detection_threshold = 45
 
-        # Initilaize the audio embedder
         self.audio_embedder = AudioEmbedder(
             model_name=embedding_name,
             byol_dir=byol_dir,
@@ -69,9 +63,6 @@ class Embedding:
             verbose=verbose,
         )
         
-
-    
-
     def _detect_nonsilent(
         self, diff_path: str, detection_threshold: int
     ) -> List[Tuple[float, float]]:

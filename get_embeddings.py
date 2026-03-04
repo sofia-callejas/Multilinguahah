@@ -9,6 +9,8 @@ import argparse
 import os
 import os.path as osp
 import pickle
+import gc
+import torch
 
 from laughter_detection.core.embedding import Embedding
 
@@ -39,6 +41,12 @@ if __name__ == "__main__":
 
     for filename in os.listdir(root_dir):
         input_path = os.path.join(root_dir, filename)
-        if os.path.isfile(input_path):
-            input_path = os.path.join(root_dir, filename)
-            laughter_detector._get_embeddings(audio_filename=filename)
+        subdir = os.path.dirname(root_dir)
+
+        embedding_dir = os.path.join(subdir, "embedding",embedding_name)
+
+        embedding_path = os.path.join(embedding_dir, filename.replace(".wav", ".pt"))
+        if not os.path.exists(embedding_path):
+            if os.path.isfile(input_path):
+                input_path = os.path.join(root_dir, filename)
+                laughter_detector._get_embeddings(audio_filename=filename)

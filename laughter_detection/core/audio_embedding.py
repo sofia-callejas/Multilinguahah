@@ -11,7 +11,11 @@ import wav2clip
 from ext.byol_a.byol_a.common import load_yaml_config
 from ext.byol_a.byol_a.augmentations import PrecomputedNorm
 from ext.byol_a.byol_a.models import AudioNTT2020
+import sys
+import os
+sys.path.append(os.path.abspath("ext/unilm/beats"))
 
+from ext.unilm.beats.BEATs import BEATs as BEATsModel, BEATsConfig
 EPS = torch.finfo(torch.float).eps
 
 
@@ -83,6 +87,30 @@ class Wav2CLIP(LightningModule):
         audio_embedding = torch.from_numpy(audio_embedding)
         return audio_embedding
 
+
+class BEATs(LightningModule):
+    def __init__(self, root_dir: str = "ext/unilm/beats"):
+        super(BEATs,self).__init__()
+        self._root_dir = root_dir
+        self.pretrained_path = osp.join(self._root_dir,"BEATs_iter3_plus_AS20K_finetuned_on_AS2M_cpt1.pt")
+        checkpoint = torch.load(self.pretrained_path)
+        self.cfg = BEATsConfig(checkpoint['cfg'])
+        self.model = BEATsModel(self.cfg)
+        self.model.load_state_dict(checkpoint["model"])
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim == 3:
+            x = x.squeeze(1)
+
+        if x.ndim == 1:
+            x = x.unsqueeze(0)
+
+        if x.shape[-1] <= 400:
+            raise ValueError(f"Audio segment too short! Expected > 400 samples, got {x.shape[-1]}")
+
+        padding_mask = torch.zeros(x.shape[0], x.shape[1], device=x.device).bool()
+    
+        feats, _ = self.model.extract_features(x, padding_mask=padding_mask)
+        return feats.mean(dim=1)
 
 class AudioEmbedder:
     """Compute pre-trained audio embeddings.
@@ -169,6 +197,14 @@ class AudioEmbedder:
                 logger=False,
             )
         
+        elif self.model_name.startswith("beats"):
+            self.beats_model = BEATs()
+            self.beats_trainer = Trainer(
+                devices=num_gpus,
+                accelerator="gpu",
+                logger=False,
+            )
+
         elif self.model_name.startswith("b+w"):
             self.wav2clip_model = Wav2CLIP()
             self.byola_model = BYOLa(byol_dir)
@@ -248,6 +284,25 @@ class AudioEmbedder:
         
         return wav2clip_embeddings
 
+    def _get_beats(self, audio_segments: List[torch.Tensor]) -> torch.Tensor:
+        """Compute Wav2CLIP audio embedding given a list of audio tracks."""
+        
+        if not audio_segments:
+            return torch.empty((0, 1280))
+    
+        raw_loader = DataLoader(
+            audio_segments,
+            batch_size=1,
+            num_workers=self.num_workers,
+        )
+        
+        beats_embeddings = self.wav2clip_trainer.predict(
+            self.beats_model, raw_loader
+        )
+        beats_embeddings = torch.stack(beats_embeddings).squeeze().cpu()
+        
+        return beats_embeddings
+
     def get_audioembeddings(
         self,
         audio_segments: List[torch.Tensor],
@@ -266,6 +321,9 @@ class AudioEmbedder:
         
         elif self.model_name.startswith("wav2clip"):
             audio_embeddings = self._get_wav2clip(audio_segments)
+        
+        elif self.model_name.startswith("beats"):
+            audio_embeddings = self._get_beats(audio_segments)
 
         elif self.model_name.startswith("b+w"):
             byola_embeddings = self._get_byola(audio_segments, current_samplerate)
