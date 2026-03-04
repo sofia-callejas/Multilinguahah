@@ -331,7 +331,7 @@ if __name__ == "__main__":
         clusterer = KMeans(n_clusters=4, random_state=42)
         train_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
         cluster_labels = clusterer.fit_predict(train_np)
-        centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(3)])
+        centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(4)])
 
         unique, counts = np.unique(cluster_labels, return_counts=True)
         cluster_sizes = dict(zip(unique, counts))

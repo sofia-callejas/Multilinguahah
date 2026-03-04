@@ -251,7 +251,7 @@ if __name__ == "__main__":
         clusterer = KMeans(n_clusters=4, random_state=42)
         train_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
         cluster_labels = clusterer.fit_predict(train_np)
-        centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(3)])
+        centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(4)])
 
         unique, counts = np.unique(cluster_labels, return_counts=True)
         cluster_sizes = dict(zip(unique, counts))
@@ -327,7 +327,7 @@ if __name__ == "__main__":
         sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
         cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
         remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
-        
+
     elif cluster_method == "funnynet":
         clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))
         test_np = test_audio_embedding.cpu().numpy().astype(np.float32)
