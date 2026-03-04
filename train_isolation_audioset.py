@@ -326,43 +326,6 @@ if __name__ == "__main__":
         cluster_results = np.array([1 if p == 1 else 0 for p in preds])
         centroids = None
 
-    elif cluster_method == "hdbscan":
-        clusterer = hdbscan.HDBSCAN(min_cluster_size=5,min_samples=5, prediction_data=True)
-        cluster_labels = clusterer.fit_predict(train_audio_embeddings)
-        cluster_results = np.array([0 if lbl != -1 else 1 for lbl in cluster_labels])
-
-        os.makedirs(model_path, exist_ok=True)
-        joblib.dump(clusterer, os.path.join(model_path, "hdbscan.joblib"))
-
-    elif cluster_method == "isolation-kmeans":
-        isolation = IsolationForest(n_estimators=100, contamination=0.1, random_state=42)
-        iso_preds = isolation.fit_predict(train_audio_embeddings.cpu().numpy().astype(np.float32))
-        clean_mask = iso_preds == 1
-        clean_embeddings = train_audio_embeddings[clean_mask].cpu().numpy().astype(np.float32)
-        joblib.dump(isolation, os.path.join(model_path, "isolation_cleaning.joblib"))
-
-        from sklearn.cluster import AgglomerativeClustering
-        nb = 2
-        agglo = AgglomerativeClustering(n_clusters=nb)
-        clean_clusters = agglo.fit_predict(clean_embeddings)
-        centroids = np.array([clean_embeddings[clean_clusters == i].mean(axis=0) for i in range(nb)])
-        os.makedirs(model_path, exist_ok=True)
-        joblib.dump(agglo, os.path.join(model_path, "agglo_cleaned.joblib"))
-
-
-        energy_clean = np.linalg.norm(clean_embeddings, axis=1)
-        cluster_energy = [energy_clean[clean_clusters == c].mean() for c in range(nb)]
-
-        min_energy = min(cluster_energy)
-        high_energy_clusters = [c for c, e in enumerate(cluster_energy) if e > min_energy]
-        cluster_map = {c: (1 if c in high_energy_clusters else 0) for c in range(nb)}
-
-        cluster_results = np.zeros(len(train_audio_embeddings), dtype=int)
-        cluster_results_clean = np.array([cluster_map[c] for c in clean_clusters])
-        cluster_results[clean_mask] = cluster_results_clean
-
-
-        joblib.dump(cluster_map, os.path.join(model_path, "kmeans_cluster_map.joblib"))
     
     elif cluster_method == "funnynet":
         clusterer = KMeans(n_clusters=4, random_state=42)
@@ -450,32 +413,6 @@ if __name__ == "__main__":
         cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
         remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
         
-    elif cluster_method == "hdbscan":
-        centroids = None
-        isolation_model = joblib.load(os.path.join(model_path, "hdbscan.joblib"))
-        test_np = test_audio_embedding.cpu().numpy()
-        preds, strengths = hdbscan.approximate_predict(isolation_model, test_np)
-        cluster_results = np.array([0 if p != -1 else 1 for p in preds])
-        
-
-        cluster_counts = Counter(cluster_results)
-        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
-        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
-        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
-        music_cluster_set = {1}
-
-    elif cluster_method == "isolation-kmeans":
-        kmeans_model = joblib.load(os.path.join(model_path, "agglo_cleaned.joblib"))
-        cluster_map = joblib.load(os.path.join(model_path, "kmeans_cluster_map.joblib"))
-
-        test_np = test_audio_embedding.cpu().numpy().astype(np.float32)
-        raw_clusters = kmeans_model.fit_predict(test_np)
-        cluster_results_test = np.array([cluster_map[c] for c in raw_clusters])
-
-        music_cluster_set = {1}  
-
-        cluster_counts = Counter(cluster_results_test)
-        remapped_results = cluster_results_test
 
     elif cluster_method == "funnynet":
         clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))

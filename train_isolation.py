@@ -246,6 +246,25 @@ if __name__ == "__main__":
         preds = isolation.predict(train_audio_embeddings)
         cluster_results = np.array([0 if p == 1 else 1 for p in preds])
         centroids = None
+
+    elif cluster_method == "funnynet":
+        clusterer = KMeans(n_clusters=4, random_state=42)
+        train_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
+        cluster_labels = clusterer.fit_predict(train_np)
+        centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(3)])
+
+        unique, counts = np.unique(cluster_labels, return_counts=True)
+        cluster_sizes = dict(zip(unique, counts))
+
+        smallest_cluster = min(cluster_sizes, key=cluster_sizes.get)
+
+        cluster_results = np.array([
+            1 if lbl == smallest_cluster else 0
+            for lbl in cluster_labels
+        ])
+
+        os.makedirs(model_path, exist_ok=True)
+        joblib.dump(clusterer, os.path.join(model_path, "kmeans.joblib"))
     else:
         raise ValueError(f"Unknown cluster_method: {cluster_method}")
 
@@ -302,6 +321,27 @@ if __name__ == "__main__":
         test_np = test_audio_embedding.cpu().numpy()
         preds = isolation_model.predict(test_np)
         cluster_results = np.array([0 if p == 1 else 1 for p in preds])
+        music_cluster_set = {1}
+
+        cluster_counts = Counter(cluster_results)
+        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
+        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
+        
+    elif cluster_method == "funnynet":
+        clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))
+        test_np = test_audio_embedding.cpu().numpy().astype(np.float32)
+
+        cluster_labels = clusterer.predict(test_np)
+
+        cluster_counts = Counter(cluster_labels)
+
+        smallest_cluster = min(cluster_counts, key=cluster_counts.get)
+
+        cluster_counts = np.array([
+            1 if lbl == smallest_cluster else 0
+            for lbl in cluster_labels
+        ])
         music_cluster_set = {1}
 
         cluster_counts = Counter(cluster_results)
