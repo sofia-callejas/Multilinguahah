@@ -1,18 +1,6 @@
-"""
-This script detects laughter within all audio files contained in the directory
-`root_dir/audio/raw`, and save one pickle file for each audio file with
-laughter timecodes in the directory `root_dir/audio/laughter`.
-"""
-
-
 import argparse
 import os
-import os.path as osp
-import glob
-import pickle
 from sklearn.cluster import KMeans
-from sklearn.cluster import SpectralClustering
-from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 import torch
 import matplotlib.pyplot as plt
@@ -155,34 +143,6 @@ if __name__ == "__main__":
             plt.tight_layout()
             plt.savefig(os.path.join(cluster_path, f"cluster_k_{k}.png"))
             plt.close()
-
-        elif cluster_method == "spectral":
-            print(f"Fitting Spectral Clustering with k={k}")
-            spectral = SpectralClustering(
-                n_clusters=k,
-                affinity='nearest_neighbors',
-                n_neighbors=10,
-                assign_labels='kmeans',
-                random_state=0
-                )
-            labels = spectral.fit_predict(train_audio_embeddings)
-
-            if k == 1:
-                inertias.append(0)  
-            else:
-                score = silhouette_score(train_audio_embeddings, labels)
-                inertias.append(score)
-
-            plt.figure(figsize=(20, 20))
-            scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=labels, cmap='nipy_spectral')
-            plt.title(f"KMeans Clustering (k={k})")
-            plt.xlabel("PCA 1")
-            plt.ylabel("PCA 2")
-            plt.colorbar(scatter, label="Cluster ID")
-            plt.grid(True)
-            plt.tight_layout()
-            plt.savefig(os.path.join(cluster_path, f"cluster_k_{k}.png"))
-            plt.close()
     
     if cluster_method == "kmeans":
         plt.figure(figsize=(6, 4))
@@ -195,16 +155,4 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig(os.path.join(cluster_path, "elbow_plot.png"))
         plt.close()
-    elif cluster_method == "spectral":
-        plt.figure(figsize=(6, 4))
-        plt.plot(k_range, inertias, 'bo-')
-        plt.xlabel('Number of clusters (k)')
-        plt.ylabel('Silhouette Score')
-        plt.title('Silhouette Analysis')
-        plt.xticks(list(k_range)) 
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(os.path.join(cluster_path, "silhouette_plot.png"))
-        plt.close()
-
 
