@@ -81,7 +81,7 @@ pip install -r requirements.txt
 Clean audio files by removing vocal or music components:
 
 ```bash
-python remove_voice.py --input path/to/audio
+python remove_voice.py --root_dir path/to/audio
 ```
 
 ### Step 2: Feature Extraction
@@ -89,7 +89,7 @@ python remove_voice.py --input path/to/audio
 Generate embeddings from the processed audio:
 
 ```bash
-python get_embeddings.py --input data/processed/
+python get_embeddings.py --root_dir data/processed/
 ```
 
 ### Step 3: Training
