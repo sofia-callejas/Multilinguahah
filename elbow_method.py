@@ -64,10 +64,10 @@ if __name__ == "__main__":
     train_embeddings = []
 
     for subdir, _, files in os.walk(root_dir):
-        if subdir.endswith("raw"):  # only process raw/ folders
-            lang_dir = os.path.dirname(subdir)         # e.g. data/train/cs
+        if subdir.endswith("raw"):  
+            lang_dir = os.path.dirname(subdir)         
             lang_code = os.path.basename(lang_dir)
-            diff_dir = os.path.join(lang_dir, "diff")  # e.g. data/train/cs/diff
+            diff_dir = os.path.join(lang_dir, "diff")  
             embedding_dir = os.path.join(lang_dir, "embedding",embedding_name)
             os.makedirs(diff_dir, exist_ok=True)
             os.makedirs(embedding_dir, exist_ok=True)

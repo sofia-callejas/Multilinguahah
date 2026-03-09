@@ -7,17 +7,13 @@ laughter timecodes in the directory `root_dir/audio/laughter`.
 
 import argparse
 import os
-import os.path as osp
-import pickle
-import gc
-import torch
 
 from laughter_detection.core.embedding import Embedding
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "root_dir", type=str, help="Path to the root of FunnyNet dataset"
+        "root_dir", type=str,
     )
     parser.add_argument(
         "--embedding-name",

@@ -1,14 +1,5 @@
-"""
-This script detects laughter within all audio files contained in the directory
-`root_dir/audio/raw`, and save one pickle file for each audio file with
-laughter timecodes in the directory `root_dir/audio/laughter`.
-"""
-
-
 import argparse
 import os
-import os.path as osp
-import pickle
 
 from laughter_detection.core.voice_remover import VoiceRemover
 
