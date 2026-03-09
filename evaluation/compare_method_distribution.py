@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import csv
 from laughter_detection.core.utils import load_preds
 
-# ----------------- Argument Parsing -----------------
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("pred_root", type=str, help="Root path to predictions by language")
@@ -20,7 +19,6 @@ def parse_arguments():
     parser.add_argument("model_type", type=str, help="Model type, e.g., isolation")
     return parser.parse_args()
 
-# ----------------- Utility Functions -----------------
 def convertir_en_tuples(liste_de_listes):
     return [tuple(pair) for pair in liste_de_listes]
 
@@ -76,7 +74,6 @@ def get_interval_accuracies(gt_segments, pred_segments, iou_threshold=0.5):
         records.append({"length":gt_end-gt_start,"correct":int(matched)})
     return pd.DataFrame(records)
 
-# ----------------- Main -----------------
 if __name__=="__main__":
     args = parse_arguments()
     pred_root = args.pred_root
@@ -89,7 +86,6 @@ if __name__=="__main__":
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- Aggregate across all languages ---
     languages = [d for d in os.listdir(label_root) if osp.isdir(osp.join(label_root,d))]
     print("Found languages:", languages)
 
@@ -158,7 +154,6 @@ if __name__=="__main__":
         "Gillick": "#601fb4" ,          
     }
 
-    # ----------------- 1) Continuous interval plot -----------------
     plt.figure(figsize=(10,6))
     for name, segments in methods.items():
         df = get_interval_accuracies(all_true, segments, iou_threshold=iou_threshold)
@@ -175,7 +170,6 @@ if __name__=="__main__":
     plt.savefig(osp.join(output_dir,"continuous_intervals.png"), dpi=300)
     plt.show()
 
-    # ----------------- 2) Binned intervals (0-1s, 1-10s) -----------------
     interval_bins = [(0,1),(1,10)]
     plt.figure(figsize=(8,5))
     for name, segments in methods.items():
@@ -199,10 +193,9 @@ if __name__=="__main__":
     plt.savefig(osp.join(output_dir,"f1_0-1_1-10s.png"), dpi=300)
     plt.show()
 
-    # ----------------- 3) Fixed bins with F1 curve -----------------
     fixed_bins = [(0,0.5),(0.5,1),(1,1.5),(1.5,2),(2,2.5),(2.5,3),(3,3.5),(3.5,4)]
     bin_centers = np.array([(start + end) / 2 for start, end in fixed_bins])
-    total_width = 0.4  # Total space allocated for all bars in one bin
+    total_width = 0.4  
     num_methods = len(methods)
     bar_width = total_width / num_methods
     plt.figure(figsize=(10,6))
@@ -212,11 +205,11 @@ if __name__=="__main__":
         for start,end in fixed_bins:
             bin_df = df[(df["length"]>=start)&(df["length"]<end)]
             if len(bin_df) == 0:
-                f1_scores.append(0) # Use 0 instead of NaN for bar charts to keep spacing consistent
+                f1_scores.append(0) 
             else:
                 TP = bin_df["correct"].sum()
                 FP = len(bin_df) - TP
-                FN = len(bin_df) - TP # Note: ensure this logic matches your ground truth counts
+                FN = len(bin_df) - TP
                 _, _, _, f1 = calculate_metrics(TP, FP, FN)
                 f1_scores.append(f1)
         current_color = colors.get(name, "gray")

@@ -32,26 +32,19 @@ class Embedding:
         verbose: bool = False,
     ):
         self.root_dir = root_dir
-
-        # Directory with difference of stereo audio tracks
         parent_dir = os.path.dirname(self.root_dir)
         self.diff_dir = osp.join(parent_dir,"diff")
         if not osp.exists(self.diff_dir):
             os.makedirs(self.diff_dir)
-        # Directory with audi embedding vectors
         self.embedding_dir = osp.join(parent_dir, "embedding", embedding_name)
         if not osp.exists(self.embedding_dir):
             os.makedirs(self.embedding_dir)
 
 
         self.min_dur = 0.3
-        # Maximum duration of an event
         self.max_dur = 30
-        # Maximum duration of continuous silence in an event
         self.max_silence = 0.1
-        # Time offset to add before and after the detected segment
         self.offset = 0
-        # Detection threshold for stereo audio tracks
         self.stereo_detection_threshold = 35
 
         self.audio_embedder = AudioEmbedder(
@@ -75,7 +68,6 @@ class Embedding:
             energy_threshold=detection_threshold,
         )
 
-        # Get each segment's timecodes and enlarge it with an offset
         nonsilent_timecodes = sorted(
             [
                 [r.meta.start - self.offset, r.meta.end + self.offset]
@@ -87,7 +79,6 @@ class Embedding:
 
     def _get_nonsilent(self, audio_filename: str):
         """Get non-silent segment tiomecodes of the given audio file."""
-        # Load raw audio tracks
         raw_path = osp.join(self.root_dir, audio_filename)
         
         raw_track, sample_rate = torchaudio.load(raw_path)
@@ -125,10 +116,8 @@ class Embedding:
         """Merge segments sharing a common part."""
         index, lenght = 0, len(segments)
         while (lenght > 1) and (lenght - index > 1):
-            # Check if the two consecutive segment share a part
             if max(segments[index]) >= min(segments[index + 1]):
                 new_segment = [min(segments[index]), max(segments[index + 1])]
-                # Add the merged segment and revove the originals
                 segments.pop(index)
                 segments.insert(index, new_segment)
                 segments.pop(index + 1)
@@ -147,7 +136,6 @@ class Embedding:
         :param detection_threshold: threshold of detection.
         :return: detected laughter timecodes.
         """
-        # Load raw audio tracks
         raw_path = osp.join(self.root_dir, audio_filename)
         parent_dir = os.path.dirname(self.root_dir)
         diff_path = osp.join(parent_dir,"diff",audio_filename)
@@ -157,16 +145,13 @@ class Embedding:
             )
         os.makedirs(self.embedding_dir , exist_ok=True)
         self.sample_rate = sample_rate
-        n_channels = raw_track.shape[0]
 
         nonsilent_timecodes = self._detect_nonsilent(
                 diff_path, self.stereo_detection_threshold
             )
 
-        # Load and extract all detected non-silent regions
         raw_segments = self._load_segments(nonsilent_timecodes, audio_filename)
 
-        # Compute audio embedding for all detected segments
         audio_embeddings = self.audio_embedder.get_audioembeddings(
             raw_segments, self.sample_rate
             )

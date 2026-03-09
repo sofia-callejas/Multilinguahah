@@ -128,7 +128,7 @@ def parse_arguments():
         "-labels",
         type=str,
         help="path of the labels",
-        default="/home/scallejas/data/test",
+        default="~/data/test",
     )
     parser.add_argument(
         "--embedding-name",
