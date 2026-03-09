@@ -1,9 +1,3 @@
-"""
-This script detects laughter within all audio files contained in the directory
-`root_dir/audio/raw`, and save one pickle file for each audio file with
-laughter timecodes in the directory `root_dir/audio/laughter`.
-"""
-
 from collections import Counter, defaultdict
 import argparse
 import os
@@ -12,25 +6,21 @@ import pickle
 import numpy as np
 import json
 from sklearn.cluster import KMeans
-from sklearn.cluster import SpectralClustering
-from sklearn.metrics import silhouette_score
 from sklearn.ensemble import IsolationForest
 from sklearn.decomposition import PCA
 from umap import UMAP
 import torch
 import matplotlib.pyplot as plt
 import joblib
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 from laughter_detection.core.embedding import Embedding
 from laughter_detection.core.voice_remover import VoiceRemover
 
 def merge_segments(segments: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     index, lenght = 0, len(segments)
     while (lenght > 1) and (lenght - index > 1):
-    # Check if the two consecutive segment share a part
         if max(segments[index]) >= min(segments[index + 1]):
             new_segment = [min(segments[index]), max(segments[index + 1])]
-            # Add the merged segment and revove the originals
             segments.pop(index)
             segments.insert(index, new_segment)
             segments.pop(index + 1)
@@ -38,7 +28,6 @@ def merge_segments(segments: List[Tuple[float, float]]) -> List[Tuple[float, flo
         else:
             index += 1
         lenght = len(segments)
-
     return segments
 
 
@@ -70,21 +59,18 @@ def plot_projection(embeddings_2d, projection_name):
     plt.close()
 
 def plot_projection_test(
-    embeddings_2d,                   # 2D projected embeddings (e.g., PCA or UMAP)
-    projection_name,                 # "pca" or "umap"
-    remapped_results,                # Cluster labels
-    cluster_method,                 # e.g., "kmeans" or "manual"
-    embedding_name,                 # Name of the embedding model
-    laughter_dir,                   # Root directory to save plot
-    centroids=None,                 # Optional: original centroids in high-dim
-    projection_model=None,          # PCA or UMAP model (with .transform method)
-    music_cluster_set=None          # Optional: clusters to gray out
+    embeddings_2d,                 
+    projection_name,              
+    remapped_results,              
+    cluster_method,                 
+    embedding_name,               
+    laughter_dir,                  
+    centroids=None,                 
+    projection_model=None,          
+    music_cluster_set=None          
 ):
     
     plt.figure(figsize=(10, 7))
-
-    #n_clusters = len(set(remapped_results))
-    #print(n_clusters)
 
     for cluster_id in sorted(set(remapped_results)):
         mask = np.array(remapped_results) == cluster_id
@@ -166,22 +152,21 @@ if __name__ == "__main__":
 
 
     for subdir, _, files in os.walk(root_dir):
-        if subdir.endswith("raw"):  # only process raw/ folders
-            lang_dir = os.path.dirname(subdir)         # e.g. data/train/cs
+        if subdir.endswith("raw"):  
+            lang_dir = os.path.dirname(subdir)        
             lang_code = os.path.basename(lang_dir)
 
             laughter_dir = osp.join(root_dir, "laughter",lang_code, embedding_name, cluster_method)
 
             os.makedirs(laughter_dir, exist_ok=True)
 
-            diff_dir = os.path.join(lang_dir, "diff")  # e.g. data/train/cs/diff
+            diff_dir = os.path.join(lang_dir, "diff") 
             embedding_dir = os.path.join(lang_dir, "embedding",embedding_name)
             os.makedirs(diff_dir, exist_ok=True)
             os.makedirs(embedding_dir, exist_ok=True)
 
             raw_files = [f for f in files if f.endswith(".wav")]
 
-            # instantiate per language
             remove_voice = VoiceRemover(subdir)
             get_embeddings = Embedding(embedding_name, subdir)
 
@@ -280,8 +265,8 @@ if __name__ == "__main__":
     pca_dir = osp.join(model_path,  "pca_model.joblib")
     joblib.dump(pca, pca_dir)
     
-    if cluster_method == "kmeans":
-        centroids_2d = pca.transform(k_means.cluster_centers_)
+    if cluster_method == "funnynet":
+        centroids_2d = pca.transform(centroids)
 
     umap_model = UMAP(n_components=2, random_state=42)
     embeddings_2d_umap = umap_model.fit_transform(embedding_np)

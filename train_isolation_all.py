@@ -82,10 +82,9 @@ if __name__ == "__main__":
     path_laughter_dir = []
     filename_to_laughter_dir = {}
 
-    # Walk through dataset
     for subdir, _, files in os.walk(root_dir):
-        if subdir.endswith("raw"):  # only process raw/ folders
-            lang_dir = os.path.dirname(subdir)         # e.g. data/train/cs
+        if subdir.endswith("raw"): 
+            lang_dir = os.path.dirname(subdir)        
             lang_code = os.path.basename(lang_dir)
 
             laughter_dir = osp.join(root_dir, "laughter_all",lang_code, embedding_name, cluster_method)
@@ -97,7 +96,6 @@ if __name__ == "__main__":
             os.makedirs(diff_dir, exist_ok=True)
             os.makedirs(embedding_dir, exist_ok=True)
             test_labels_dir = os.path.join(labels_dir, lang_code, "audio","labels")
-            #test_files = set(os.path.splitext(f)[0] for f in os.listdir(test_labels_dir) if f.endswith(".csv"))
 
             raw_files = [f for f in files if f.endswith(".wav")]
 
