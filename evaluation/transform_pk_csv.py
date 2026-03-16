@@ -5,12 +5,9 @@ import os.path as osp
 
 import numpy as np
 import pandas as pd
+import difflib
 
-from laughter_detection.core.utils import load_labels, load_preds
-from laughter_detection.core.evaluation import (
-    get_detection_scores,
-    get_temporal_scores,
-)
+from laughter_detection.core.utils import load_preds
 
 
 def parse_arguments():
@@ -40,6 +37,10 @@ def overlaps_with_base(t0, t1, base_intervals):
             return True
     return False
 
+def best_match(name: str, candidates: set) -> str:
+    matches = difflib.get_close_matches(name, candidates, n=1, cutoff=0.5)
+    return matches[0] if matches else name
+
 
 if __name__ == "__main__":
     args = parse_arguments()
@@ -55,21 +56,22 @@ if __name__ == "__main__":
     pred_dict = {osp.splitext(f)[0]: f for f in pred_filenames}
     model_dict = {osp.splitext(f)[0]: f for f in model_filenames}
 
-
-
-
-    common_keys = set(pred_dict.keys()) & set(model_dict.keys())
-
-
-
-    temporal_scores = {}
-    detect_scores = defaultdict(list)
-
+    missing_keys = set(model_dict.keys()) - set(pred_dict.keys())
+    not_missing_keys = set(pred_dict.keys()) - set(model_dict.keys())
     temporal_scores, detect_scores = {}, defaultdict(list)
-    
-    for key in sorted(common_keys):
-        pred_name = pred_dict[key]
-        model_name = model_dict[key]
+
+    for clean_name in sorted(pred_dict.keys()):
+        original_name = best_match(clean_name, model_dict.keys())
+        if original_name is None:
+            original_name = clean_name  
+
+        model_name = model_dict.get(clean_name)
+        pred_name = pred_dict.get(original_name)
+
+        if model_name is None:
+            continue
+        if pred_name is None:
+            continue
 
         pred_timecodes = load_preds(osp.join(pred_dir, pred_name))
         pred_timecodes = convertir_en_tuples(pred_timecodes)
@@ -81,17 +83,19 @@ if __name__ == "__main__":
         df_pred = pd.DataFrame(pred_timecodes, columns=["t0", "t1"])
         pred_timecodes = df_pred.copy()
 
-        base_paper_intervals = list(zip(model_paper["t0"].tolist(), model_paper["t1"].tolist()))
-        df_model_filtered_base_paper = df_pred[~df_pred.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_paper_intervals), axis=1)]
+        base_pred_intervals_paper = list(zip(df_pred["t0"].tolist(), df_pred["t1"].tolist()))
+        df_pred_filtered_base_model = model_paper[~model_paper.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_pred_intervals_paper), axis=1)]
 
-        model_paper["source"] = "Initial"
-        df_model_filtered_base_paper["source"] = "Added"
-        
-        model_union_base_pred_paper = pd.concat([model_paper, df_model_filtered_base_paper], ignore_index=True)
+        df_pred["source"] = "Initial"
+        df_pred_filtered_base_model["source"] = "Added"
+
+        model_union_base_pred_paper = pd.concat([df_pred, df_pred_filtered_base_model], ignore_index=True)
         model_union_base_pred_paper["label"] = "risa"
         clean_name = pred_name.replace(".pk", "")
         output_file = os.path.join(output_dir, f"{clean_name}.csv")
         model_union_base_pred_paper.to_csv(output_file, index=False)
+
+
 
 
 

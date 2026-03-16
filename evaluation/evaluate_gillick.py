@@ -8,13 +8,6 @@ import pandas as pd
 import json
 import re
 
-from laughter_detection.core.utils import load_labels, load_preds
-from laughter_detection.core.evaluation import (
-    get_detection_scores,
-    get_temporal_scores,
-)
-
-
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -47,6 +40,7 @@ def df_en_tuples(df):
 
 def safe_mean(x):
     return float(np.mean(x)) if len(x) > 0 else np.nan
+
 
 def json_to_segments_df(json_data):
     """
@@ -92,7 +86,6 @@ def match_predictions_to_gt_by_start(preds, gts):
                 best_pred = pred
                 best_idx = i
 
-        # Only accept if IoU passes threshold
         if best_pred is not None:
             if calculate_iou(gt, best_pred) >= 0.7:
                 matches.append((gt, best_pred))
@@ -138,29 +131,17 @@ def bootstrap_ci(metric_fn, gt_segments, pred_segments, n_bootstrap=1000, alpha=
 
     return mean, (upper - mean)
 
-def calculate_iou(interval1, interval2):
-    """
-    Calculate Intersection over Union (IoU) for two intervals.
-    Each interval is a tuple (start, end).
-    """
-    start1, end1 = interval1
-    start2, end2 = interval2
+def calculate_iou(a, b):
+    s1, e1 = a
+    s2, e2 = b
 
-    # Calculate intersection
-    intersection_start = max(start1, start2)
-    intersection_end = min(end1, end2)
-    intersection = max(0, intersection_end - intersection_start)
+    inter = max(0, min(e1, e2) - max(s1, s2))
+    union = (e1 - s1) + (e2 - s2) - inter
 
-    # Calculate union
-    area1 = end1 - start1
-    area2 = end2 - start2
-    union = area1 + area2 - intersection
-
-    # Avoid division by zero
-    if union == 0:
+    if union <= 0:
         return 0.0
 
-    return intersection / union
+    return inter / union
 
 import math
 def adaptive_iou_threshold(label, tau_min=0.3, tau_max=0.7, max_duration=5.0):
@@ -182,11 +163,9 @@ def evaluate_predictions_with_iou(predictions, labels, iou_threshold=0.5):
     FP = 0
     FN = 0
 
-    # Track which labels have been matched
     matched_labels = set()
     not_matched_labels = set()
     
-    # Check each prediction
     for pred in predictions:
         best_iou = 0.0
         best_label_idx = -1
@@ -204,9 +183,7 @@ def evaluate_predictions_with_iou(predictions, labels, iou_threshold=0.5):
             matched_labels.add(best_label_idx)  # Mark this label as matched
         else:
             FP += 1
-            # not_matched_labels.add(label)
 
-    # Check for FN
     for i, label in enumerate(labels):
         best_iou = 0.0
         for pred in predictions:
@@ -218,11 +195,10 @@ def evaluate_predictions_with_iou(predictions, labels, iou_threshold=0.5):
         if best_iou < iou_threshold:
             not_matched_labels.add(label)
 
-    # Count False Negatives (labels not matched by any prediction)
-    # FN = len(labels) - len(matched_labels)
     FN = len(not_matched_labels)
 
     return TP, FP, FN, not_matched_labels
+
 
 def calculate_metrics(TP, FP, FN):
     """
@@ -265,6 +241,7 @@ if __name__ == "__main__":
     args = parse_arguments()
     pred_dir = args.pred_dir
     label_dir = args.label_dir
+    print(label_dir)
     model_dir = args.model_dir
     output_dir = args.output_dir
     model_type = args.model_type
@@ -280,21 +257,13 @@ if __name__ == "__main__":
     label_dict = {osp.splitext(f)[0]: f for f in label_filenames}
     model_dict = {osp.splitext(f)[0]: f for f in model_filenames}
 
-    pred_base_map = {
-        k: remove_time_suffix(k)
-        for k in pred_dict.keys()
-    }
-
-    common_keys = {
-        k for k, base in pred_base_map.items()
-        if base in label_dict
-    }
-
+    common_keys = set(pred_dict.keys()) & set(label_dict.keys())
 
     temporal_scores = {}
     detect_scores = defaultdict(list)
 
     temporal_scores, detect_scores = {}, defaultdict(list)
+
     TP_all_paper = 0
     FP_all_paper = 0
     FN_all_paper = 0
@@ -341,56 +310,24 @@ if __name__ == "__main__":
     
     for key in sorted(common_keys):
 
-        base_key = pred_base_map[key] 
-        pred_name = pred_dict.get(key)
-
-
-        if pred_name is not None:
-            pred_path = osp.join(pred_dir, pred_name)
-        else:
-            pred_path = None
-        
-        
-        label_name = label_dict[base_key]
+        pred_name = pred_dict[key]
+        label_name = label_dict[key]
         model_name = model_dict[key]
+
+        pred_timecodes = pd.read_csv(osp.join(pred_dir, pred_name))
+
         
-        if pred_path is not None and osp.exists(osp.join(pred_dir, pred_name)):
-            pred_timecodes = load_preds(osp.join(pred_dir, pred_name))
-            pred_timecodes = convertir_en_tuples(pred_timecodes)
-            #pred_timecodes = pd.read_csv(osp.join(pred_dir, pred_name))
-        else:
-            pred_timecodes = pd.DataFrame(columns=["t0", "t1"])
-        
-        pred_timecodes = json_to_segments_df(osp.join(pred_dir, pred_name))
         with open(osp.join(label_dir, label_name), "r", encoding="utf-8") as f:
             import csv
             sample = f.read(2048)  # small sample
             delimiter = csv.Sniffer().sniff(sample).delimiter
-            
-        with open(osp.join(label_dir, label_name), "r") as f:
-            label_json = json.load(f)
 
-        true_timecodes = json_to_segments_df(label_json)
-
-
+        true_timecodes = pd.read_csv(osp.join(label_dir, label_name),delimiter=delimiter)
         with open(osp.join(model_dir, model_name), "r") as f:
             model_json = json.load(f)
 
         model_timecodes = json_to_segments_df(model_json)
-
-        df_pred = pd.DataFrame(pred_timecodes, columns=["t0", "t1"])
-        #df_pred = pred_timecodes.copy()
-
-        df_pred["type"] = "pred"
-        true_timecodes["type"] = "true"
-        model_timecodes["type"] = "model"
-
-
-        df_all = pd.concat([df_pred, true_timecodes, model_timecodes], ignore_index=True)
-        out_path = os.path.join(output_dir, f"{key}.csv")
-        df_all.to_csv(out_path, index=False)
-
-
+        df_pred = pred_timecodes.copy()
 
         base_pred_intervals_paper = list(zip(df_pred["t0"].tolist(), df_pred["t1"].tolist()))
         df_pred_filtered_base_model = model_timecodes[~model_timecodes.apply(lambda row: overlaps_with_base(row.t0, row.t1, base_pred_intervals_paper), axis=1)]
@@ -508,7 +445,6 @@ if __name__ == "__main__":
 
     precision, recall, accuracy, f1= calculate_metrics(TP_all, FP_all, FN_all)   
 
-
     mae_start = safe_mean(mae_start_all)
     mae_end = safe_mean(mae_end_all)
 
@@ -614,30 +550,7 @@ results = {
 }
 
 df_results = pd.DataFrame(results).T
-print(df_results)
-exit()
 
-output_file = os.path.join(output_dir, "metrics.csv")
 
-df_new = df_results.copy()
-df_new["oui_threshold"] = iou_threshold
-df_new["method"] = df_new.index 
-df_new = df_new.reset_index(drop=True)
-
-if os.path.exists(output_file):
-    df_db = pd.read_csv(output_file)
-    
-    df_db = pd.concat([df_db, df_new], ignore_index=True)
-    df_db = df_db.drop_duplicates(
-        subset=["method", "language", "oui_threshold"],
-        keep="last"
-    )
-else:
-    df_db = df_new
-
-#print(df_db[df_db["language"]=="en_uk"])
-
-print(df_db)
-df_db.to_csv(output_file, index=False)
     
 
