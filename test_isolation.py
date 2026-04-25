@@ -199,7 +199,7 @@ if __name__ == "__main__":
                     if embedding_name.startswith("b+w"):
                         target_dim = 2560
                     elif embedding_name.startswith("byola"):
-                        target_dim = 2480
+                        target_dim = 2048
                     elif embedding_name.startswith("wav2clip"):
                         target_dim = 512
                     else:

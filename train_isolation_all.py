@@ -126,9 +126,9 @@ if __name__ == "__main__":
                 if embedding_name.startswith("b+w"):
                     target_dim = 2560
                 elif embedding_name.startswith("byola"):
-                    target_dim = 2480
+                    target_dim = 2048
                 elif embedding_name.startswith("audioset"):
-                    target_dim = 2480
+                    target_dim = 2048
                 elif embedding_name.startswith("wav2clip"):
                     target_dim = 512
                 else:
@@ -151,99 +151,106 @@ if __name__ == "__main__":
 
     train_audio_embeddings = torch.vstack(train_embeddings)
 
-    if cluster_method == "isolation":
-        isolation_model = joblib.load(os.path.join(model_path, "isolation.joblib"))
-        test_np = train_audio_embeddings.cpu().numpy()
-        preds = isolation_model.predict(test_np)
-        cluster_results = np.array([0 if p == 1 else 1 for p in preds])
-        music_cluster_set = {1}
-        cluster_counts = Counter(cluster_results)
-        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
-        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
-        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
+    seeds = [42, 123, 456, 789, 999]
+    for seed in seeds:
+        if cluster_method == "isolation":
+            isolation_model = joblib.load(os.path.join(model_path, f"isolation_{seed_str}.joblib"))
+            test_np = train_audio_embeddings.cpu().numpy()
+            preds = isolation_model.predict(test_np)
+            cluster_results = np.array([0 if p == 1 else 1 for p in preds])
+            music_cluster_set = {1}
+            cluster_counts = Counter(cluster_results)
+            sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+            cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
+            remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
 
-    elif cluster_method == "funnynet":
-        clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))
-        test_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
-        cluster_labels = clusterer.predict(test_np)
-        cluster_counts = Counter(cluster_labels)
-        largest_cluster = max(cluster_counts, key=cluster_counts.get)
-        cluster_results = np.array([
-            1 if lbl == largest_cluster else 0
-            for lbl in cluster_labels
-        ])
-        music_cluster_set = {1}
+        elif cluster_method == "funnynet":
+            clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))
+            test_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
+            cluster_labels = clusterer.predict(test_np)
+            cluster_counts = Counter(cluster_labels)
+            largest_cluster = max(cluster_counts, key=cluster_counts.get)
+            cluster_results = np.array([
+                1 if lbl == largest_cluster else 0
+                for lbl in cluster_labels
+            ])
+            music_cluster_set = {1}
 
-        cluster_counts = Counter(cluster_results)
-        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
-        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
-        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
+            cluster_counts = Counter(cluster_results)
+            sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+            cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
+            remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
 
-    music_indices = np.where(np.isin(remapped_results, list(music_cluster_set)))[0]
+        music_indices = np.where(np.isin(remapped_results, list(music_cluster_set)))[0]
 
-    laughter_timecodes = defaultdict(list)
+        laughter_timecodes = defaultdict(list)
 
-    n_detections = len(train_nonsilent_timecodes)
-    for detection_index in range(n_detections):
-        if detection_index in music_indices:
-            continue
-        timecode = train_nonsilent_timecodes[detection_index]
-        filename = train_episode_filenames[detection_index]
-        laughter_timecodes[filename].append(timecode)
+        n_detections = len(train_nonsilent_timecodes)
+        for detection_index in range(n_detections):
+            if detection_index in music_indices:
+                continue
+            timecode = train_nonsilent_timecodes[detection_index]
+            filename = train_episode_filenames[detection_index]
+            laughter_timecodes[filename].append(timecode)
 
-    for filename, timecodes in laughter_timecodes.items():
-        merged_timecodes = merge_segments(timecodes)
-        laughter_timecodes[filename] = merged_timecodes
+        for filename, timecodes in laughter_timecodes.items():
+            merged_timecodes = merge_segments(timecodes)
+            laughter_timecodes[filename] = merged_timecodes
 
-    pred_timecodes = dict(laughter_timecodes)
+        pred_timecodes = dict(laughter_timecodes)
 
-    for i, (current_filename, current_timecodes) in enumerate(pred_timecodes.items()):
-        laughter_filename = f"{current_filename[:-4]}.pk"
-        from pathlib import Path
-        laughter_dir = filename_to_laughter_dir.get(current_filename)
+        for i, (current_filename, current_timecodes) in enumerate(pred_timecodes.items()):
+            laughter_filename = f"{current_filename[:-4]}.pk"
+            from pathlib import Path
+            laughter_dir = filename_to_laughter_dir.get(current_filename)
 
-        if laughter_dir is None:
-            print(f"Warning: No laughter directory found for file {current_filename}. Skipping.")
-            continue
+            if laughter_dir is None:
+                print(f"Warning: No laughter directory found for file {current_filename}. Skipping.")
+                continue
 
-        laughter_path = osp.join(laughter_dir, laughter_filename)
+            laughter_path = osp.join(laughter_dir, laughter_filename)
 
-        parts = Path(laughter_path).parts
-        lang_index = parts.index("laughter_all") + 1
-        language = parts[lang_index]
-        filename = Path(laughter_path).with_suffix(".wav").name
+            parts = Path(laughter_path).parts
+            lang_index = parts.index("laughter_all") + 1
+            language = parts[lang_index]
+            filename = Path(laughter_path).with_suffix(".wav").name
 
-        new_path = Path(root_dir) / language / "raw" / filename
+            new_path = Path(root_dir) / language / "raw" / filename
         
-        if not new_path.exists():
-            print(new_path) 
+            if not new_path.exists():
+                print(new_path) 
 
-        with open(laughter_path, "wb") as f:
-            pickle.dump(current_timecodes, f)
+            with open(laughter_path, "wb") as f:
+                pickle.dump(current_timecodes, f)
 
-    all_filenames = set(filename_to_laughter_dir.keys())
-    predicted_filenames = set(pred_timecodes.keys())
-    missing_filenames = all_filenames - predicted_filenames
-    print(missing_filenames)
+        all_filenames = set(filename_to_laughter_dir.keys())
+        predicted_filenames = set(pred_timecodes.keys())
+        missing_filenames = all_filenames - predicted_filenames
+        print(missing_filenames)
 
-    for filename in missing_filenames:
-        laughter_dir = filename_to_laughter_dir.get(filename)
-        if laughter_dir is None:
-            print(f"Warning: No laughter directory found for file {filename}. Skipping.")
-            continue
+        for filename in missing_filenames:
+            laughter_dir = filename_to_laughter_dir.get(filename)
+            if laughter_dir is None:
+                print(f"Warning: No laughter directory found for file {filename}. Skipping.")
+                continue
 
-        laughter_filename = f"{filename[:-4]}.pk"
-        laughter_path = osp.join(laughter_dir, laughter_filename)
-
-
-        parts = Path(laughter_path).parts
-        lang_index = parts.index("laughter_all") + 1
-        language = parts[lang_index]
-        original_audio_path = Path(root_dir) / language / "raw" / filename
-        if not original_audio_path.exists():
-            print(f"Missing audio file: {original_audio_path}")
+            laughter_filename = f"{filename[:-4]}.pk"
 
 
-        with open(laughter_path, "wb") as f:
-            pickle.dump([], f)
+            seed_output_dir = os.path.join(original_laughter_dir, seed_str)
+            os.makedirs(seed_output_dir, exist_ok=True)
+                
+            laughter_path = osp.join(seed_output_dir, laughter_filename)
+
+
+            parts = Path(laughter_path).parts
+            lang_index = parts.index("laughter_all") + 1
+            language = parts[lang_index]
+            original_audio_path = Path(root_dir) / language / "raw" / filename
+            if not original_audio_path.exists():
+                print(f"Missing audio file: {original_audio_path}")
+
+
+            with open(laughter_path, "wb") as f:
+                pickle.dump([], f)
 

@@ -195,9 +195,9 @@ if __name__ == "__main__":
                 if embedding_name.startswith("b+w"):
                     target_dim = 2560
                 elif embedding_name.startswith("byola"):
-                    target_dim = 2480
+                    target_dim = 2048
                 elif embedding_name.startswith("audioset"):
-                    target_dim = 2480
+                    target_dim = 2048
                 elif embedding_name.startswith("wav2clip"):
                     target_dim = 512
                 else:
@@ -281,165 +281,169 @@ if __name__ == "__main__":
     train_audio_embeddings = torch.vstack(train_embeddings)
     test_audio_embedding =  torch.vstack(test_embeddings)
 
-
-
-    if cluster_method == "isolation":
-        from sklearn.preprocessing import StandardScaler
-        scaler = StandardScaler()
-        embeddings_norm = scaler.fit_transform(train_audio_embeddings.cpu().numpy())
-        isolation = IsolationForest(n_estimators=100, contamination="auto", random_state=42)
-        isolation.fit(embeddings_norm)
-        joblib.dump(isolation, os.path.join(model_path, "isolation.joblib"))
-        preds = isolation.predict(embeddings_norm)
-        cluster_results = np.array([1 if p == 1 else 0 for p in preds])
-        centroids = None
+    seeds = [42, 123, 456, 789, 999]
+    for seed in seeds:
+        seed_str = f"seed_{seed}"    
+        if cluster_method == "isolation":
+            from sklearn.preprocessing import StandardScaler
+            scaler = StandardScaler()
+            embeddings_norm = scaler.fit_transform(train_audio_embeddings.cpu().numpy())
+            isolation = IsolationForest(n_estimators=100, contamination="auto", random_state=seed)
+            isolation.fit(embeddings_norm)
+            joblib.dump(isolation, os.path.join(model_path, f"isolation_{seed_str}.joblib"))
+            preds = isolation.predict(embeddings_norm)
+            cluster_results = np.array([1 if p == 1 else 0 for p in preds])
+            centroids = None
 
     
-    elif cluster_method == "funnynet":
-        clusterer = KMeans(n_clusters=4, random_state=42)
-        train_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
-        cluster_labels = clusterer.fit_predict(train_np)
-        centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(4)])
+        elif cluster_method == "funnynet":
+            clusterer = KMeans(n_clusters=4, random_state=42)
+            train_np = train_audio_embeddings.cpu().numpy().astype(np.float32)
+            cluster_labels = clusterer.fit_predict(train_np)
+            centroids = np.array([train_np[cluster_labels == i].mean(axis=0) for i in range(4)])
 
-        unique, counts = np.unique(cluster_labels, return_counts=True)
-        cluster_sizes = dict(zip(unique, counts))
+            unique, counts = np.unique(cluster_labels, return_counts=True)
+            cluster_sizes = dict(zip(unique, counts))
 
-        smallest_cluster = min(cluster_sizes, key=cluster_sizes.get)
+            smallest_cluster = min(cluster_sizes, key=cluster_sizes.get)
 
-        cluster_results = np.array([
-            1 if lbl == smallest_cluster else 0
-            for lbl in cluster_labels
-        ])
+            cluster_results = np.array([
+                1 if lbl == smallest_cluster else 0
+                for lbl in cluster_labels
+            ])
 
-        os.makedirs(model_path, exist_ok=True)
-        joblib.dump(clusterer, os.path.join(model_path, "kmeans.joblib"))
+            os.makedirs(model_path, exist_ok=True)
+            joblib.dump(clusterer, os.path.join(model_path, "kmeans.joblib"))
 
-    else:
-        raise ValueError(f"Unknown cluster_method: {cluster_method}")
-
-    cluster_counts = Counter(cluster_results)
-    sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
-    cluster_id_remap = {old: new for new, (old, _) in enumerate(sorted_clusters)}
-    remapped_results = np.array([cluster_id_remap[c] for c in cluster_results])
-
-    embedding_np = train_audio_embeddings.cpu().numpy()
-
-    pca = PCA(n_components=2)
-    embeddings_2d_pca = pca.fit_transform(train_audio_embeddings.cpu().numpy())
-    pca_dir = osp.join(model_path,  "pca_model.joblib")
-    joblib.dump(pca, pca_dir)
-    
-    if cluster_method == "funnynet":
-        centroids_2d = pca.transform(centroids)
-
-    umap_model = UMAP(n_neighbors=15, n_components=5, random_state=42)
-    embeddings_2d_umap = umap_model.fit_transform(embedding_np)
-    joblib.dump(umap_model, osp.join(model_path, "umap_model.joblib"))
-
-    cluster_infos = []
-
-    for cluster_id in np.unique(remapped_results):
-        indices = np.where(remapped_results == cluster_id)[0]
-        cluster_points_pca = embeddings_2d_pca[indices]
-        cluster_points_umap = embeddings_2d_umap[indices]
-
-        if cluster_method == "kmeans" or cluster_method == "funnynet":
-            centroid_pca = centroids_2d[cluster_id]
         else:
-            centroid_pca = None  
+            raise ValueError(f"Unknown cluster_method: {cluster_method}")
 
-        cluster_infos.append({
-            "cluster_id": int(cluster_id),
-            "indices": indices.tolist(),
-            "points_pca": cluster_points_pca.tolist(),
-            "centroid_pca": centroid_pca.tolist() if centroid_pca is not None else None,
-            "points_umap": cluster_points_umap.tolist(),
-        })
+        cluster_counts = Counter(cluster_results)
+        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+        cluster_id_remap = {old: new for new, (old, _) in enumerate(sorted_clusters)}
+        remapped_results = np.array([cluster_id_remap[c] for c in cluster_results])
+
+        embedding_np = train_audio_embeddings.cpu().numpy()
+
+        pca = PCA(n_components=2)
+        embeddings_2d_pca = pca.fit_transform(train_audio_embeddings.cpu().numpy())
+        pca_dir = osp.join(model_path,  "pca_model.joblib")
+        joblib.dump(pca, pca_dir)
     
-    cluster_info_path = osp.join(model_path, f"clusters_{cluster_method}.json")
-    with open(cluster_info_path, "w") as f:
-        json.dump(cluster_infos, f, indent=2)
+        if cluster_method == "funnynet":
+            centroids_2d = pca.transform(centroids)
 
-    plot_projection(embeddings_2d_pca, "pca")
-    plot_projection(embeddings_2d_umap, "umap")
+        umap_model = UMAP(n_neighbors=15, n_components=5, random_state=42)
+        embeddings_2d_umap = umap_model.fit_transform(embedding_np)
+        joblib.dump(umap_model, osp.join(model_path, "umap_model.joblib"))
 
-    if cluster_method == "isolation":
-        centroids = None
-        isolation_model = joblib.load(os.path.join(model_path, "isolation.joblib"))
-        scaler = StandardScaler()
-        test_np = test_audio_embedding.cpu().numpy()
-        test_np = scaler.fit_transform(test_np)
+        cluster_infos = []
+
+        for cluster_id in np.unique(remapped_results):
+            indices = np.where(remapped_results == cluster_id)[0]
+            cluster_points_pca = embeddings_2d_pca[indices]
+            cluster_points_umap = embeddings_2d_umap[indices]
+
+            if cluster_method == "kmeans" or cluster_method == "funnynet":
+                centroid_pca = centroids_2d[cluster_id]
+            else:
+                centroid_pca = None  
+
+            cluster_infos.append({
+                "cluster_id": int(cluster_id),
+                "indices": indices.tolist(),
+                "points_pca": cluster_points_pca.tolist(),
+                "centroid_pca": centroid_pca.tolist() if centroid_pca is not None else None,
+                "points_umap": cluster_points_umap.tolist(),
+            })
+    
+        cluster_info_path = osp.join(model_path, f"clusters_{cluster_method}.json")
+        with open(cluster_info_path, "w") as f:
+            json.dump(cluster_infos, f, indent=2)
+
+        plot_projection(embeddings_2d_pca, "pca")
+        plot_projection(embeddings_2d_umap, "umap")
+
+        if cluster_method == "isolation":
+            centroids = None
+            isolation_model = joblib.load(os.path.join(model_path, f"isolation_{seed_str}.joblib"))
+            scaler = StandardScaler()
+            test_np = test_audio_embedding.cpu().numpy()
+            test_np = scaler.fit_transform(test_np)
         
-        preds = isolation_model.predict(test_np)
-        cluster_results = np.array([0 if p == 1 else 1 for p in preds])
-        music_cluster_set = {1}
+            preds = isolation_model.predict(test_np)
+            cluster_results = np.array([0 if p == 1 else 1 for p in preds])
+            music_cluster_set = {1}
 
-        cluster_counts = Counter(cluster_results)
-        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
-        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
-        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
+            cluster_counts = Counter(cluster_results)
+            sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+            cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
+            remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
         
 
-    elif cluster_method == "funnynet":
-        clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))
-        test_np = test_audio_embedding.cpu().numpy().astype(np.float32)
+        elif cluster_method == "funnynet":
+            clusterer = joblib.load(os.path.join(model_path, "kmeans.joblib"))
+            test_np = test_audio_embedding.cpu().numpy().astype(np.float32)
 
-        cluster_labels = clusterer.predict(test_np)
+            cluster_labels = clusterer.predict(test_np)
 
-        cluster_counts = Counter(cluster_labels)
+            cluster_counts = Counter(cluster_labels)
 
-        smallest_cluster = min(cluster_counts, key=cluster_counts.get)
+            smallest_cluster = min(cluster_counts, key=cluster_counts.get)
 
-        cluster_counts = np.array([
-            1 if lbl == smallest_cluster else 0
-            for lbl in cluster_labels
-        ])
-        music_cluster_set = {1}
+            cluster_counts = np.array([
+                1 if lbl == smallest_cluster else 0
+                for lbl in cluster_labels
+            ])
+            music_cluster_set = {1}
 
-        cluster_counts = Counter(cluster_results)
-        sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
-        cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
-        remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
+            cluster_counts = Counter(cluster_results)
+            sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
+            cluster_id_remap = {old_id: new_id for new_id, (old_id, _) in enumerate(sorted_clusters)}
+            remapped_results = np.array([cluster_id_remap[old] for old in cluster_results])
 
-    music_indices = np.where(np.isin(remapped_results, list(music_cluster_set)))[0]
+        music_indices = np.where(np.isin(remapped_results, list(music_cluster_set)))[0]
 
-    laughter_timecodes = defaultdict(list)
-    n_detections = len(test_nonsilent_timecodes)
-    for detection_index in range(n_detections):
-        if detection_index in music_indices:
-            continue
+        laughter_timecodes = defaultdict(list)
+        n_detections = len(test_nonsilent_timecodes)
+        for detection_index in range(n_detections):
+            if detection_index in music_indices:
+                continue
             
-        timecode = test_nonsilent_timecodes[detection_index]
-        filename = test_episode_filenames[detection_index]
-        laughter_timecodes[filename].append(timecode)
+            timecode = test_nonsilent_timecodes[detection_index]
+            filename = test_episode_filenames[detection_index]
+            laughter_timecodes[filename].append(timecode)
 
-    for filename, timecodes in laughter_timecodes.items():
-        merged_timecodes = merge_segments(timecodes)
-        laughter_timecodes[filename] = merged_timecodes
+        for filename, timecodes in laughter_timecodes.items():
+            merged_timecodes = merge_segments(timecodes)
+            laughter_timecodes[filename] = merged_timecodes
 
-    pred_timecodes = dict(laughter_timecodes)
+        pred_timecodes = dict(laughter_timecodes)
 
-    for i, (current_filename, current_timecodes) in enumerate(pred_timecodes.items()):
-        laughter_filename = f"{current_filename[:-4]}.pk"
-        from pathlib import Path
-        laughter_dir = filename_to_laughter_dir.get(current_filename)
-        if laughter_dir is None:
-            print(f"Warning: No laughter directory found for file {current_filename}. Skipping.")
-            continue
+        for i, (current_filename, current_timecodes) in enumerate(pred_timecodes.items()):
+            laughter_filename = f"{current_filename[:-4]}.pk"
+            from pathlib import Path
+            laughter_dir = filename_to_laughter_dir.get(current_filename)
+            if laughter_dir is None:
+                print(f"Warning: No laughter directory found for file {current_filename}. Skipping.")
+                continue
 
-        path = path_laughter_dir[i]
-        path_ = Path(path_laughter_dir[i])
-        laughter_path = osp.join(laughter_dir, laughter_filename)
+            path = path_laughter_dir[i]
+            path_ = Path(path_laughter_dir[i])
+            seed_output_dir = os.path.join(original_laughter_dir, seed_str)
+            os.makedirs(seed_output_dir, exist_ok=True)
+                
+            laughter_path = osp.join(seed_output_dir, laughter_filename)
 
-        parts = Path(laughter_path).parts
-        lang_index = parts.index("laughter") + 1
-        language = parts[lang_index]
-        filename = Path(laughter_path).with_suffix(".csv").name
+            parts = Path(laughter_path).parts
+            lang_index = parts.index("laughter") + 1
+            language = parts[lang_index]
+            filename = Path(laughter_path).with_suffix(".csv").name
 
-        new_path = Path("test") / language / "audio" / "labels" / filename
+            new_path = Path("test") / language / "audio" / "labels" / filename
 
-        with open(laughter_path, "wb") as f:
-            pickle.dump(current_timecodes, f)
+            with open(laughter_path, "wb") as f:
+                pickle.dump(current_timecodes, f)
 
 
             
