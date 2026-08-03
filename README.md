@@ -106,3 +106,7 @@ Select the training script based on your storage and dataset needs:
 ```bash
 python main.py --root_dir path/to/audio --labels_dir path/to/labels --task train_isolation_audioset
 ```
+
+### Dataset
+
+Repository with dataset Standup4AI https://github.com/sofia-callejas/seq-Standup4AI
