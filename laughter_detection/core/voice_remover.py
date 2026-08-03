@@ -12,7 +12,7 @@ import torch
 import torchaudio
 from tqdm import tqdm
 import sklearn_crfsuite
-#from audio_separator.separator import Separator
+from audio_separator.separator import Separator
 from demucs.pretrained import get_model
 from demucs.apply import apply_model
 import torchaudio.functional as F

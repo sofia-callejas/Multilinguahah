@@ -130,7 +130,7 @@ class Embedding:
 
 
     def _get_embeddings(self, audio_filename: str):
-        """[DEPRECATED] Detect laughters within a given stereo audio track.
+        """Detect laughters within a given stereo audio track.
 
         :param audio_filename: name of the audio track in the stereo directory.
         :param detection_threshold: threshold of detection.

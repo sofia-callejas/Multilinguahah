@@ -8,6 +8,9 @@ import pandas as pd
 import json
 import math
 
+from laughter_detection.core.utils import load_preds
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -265,9 +268,8 @@ if __name__ == "__main__":
     label_dict = {osp.splitext(f)[0]: f for f in label_filenames}
     model_dict = {osp.splitext(f)[0]: f for f in model_filenames}
 
-    
 
-    common_keys = set(pred_dict.keys()) & set(label_dict.keys())
+    common_keys = set(pred_dict.keys()) & set(label_dict.keys() &  set(model_dict.keys()))
 
     temporal_scores = {}
     detect_scores = defaultdict(list)
@@ -322,19 +324,30 @@ if __name__ == "__main__":
         pred_name = pred_dict[key]
         label_name = label_dict[key]
         model_name = model_dict[key]
+        
 
-        pred_timecodes = pd.read_csv(osp.join(pred_dir, pred_name))
+        if pred_name is not None:
+            pred_path = osp.join(pred_dir, pred_name)
+        else:
+            pred_path = None
+
+
+        pred_timecodes = load_preds(osp.join(pred_dir, pred_name))
+        pred_timecodes = convertir_en_tuples(pred_timecodes)
+        pred_timecodes = pd.DataFrame(pred_timecodes, columns=["t0", "t1"])
+
         with open(osp.join(label_dir, label_name), "r", encoding="utf-8") as f:
-            import csv
+            import csv 
             sample = f.read(2048) 
             delimiter = csv.Sniffer().sniff(sample).delimiter
 
         true_timecodes = pd.read_csv(osp.join(label_dir, label_name),delimiter=delimiter)
+        print(true_timecodes)
 
-        model_timecodes = pd.read_csv(osp.join(model_dir, model_name),delimiter=",")
-
+        model_timecodes = pd.read_csv(osp.join(model_dir, model_name))
         model_baseline = model_timecodes.loc[model_timecodes["source"] == "Initial", ["t0", "t1"]]
         model_paper = model_timecodes.loc[model_timecodes["label"] == "risa", ["t0", "t1"]]
+        print(model_baseline)
 
         df_pred = pred_timecodes.copy()
 
@@ -579,7 +592,7 @@ if os.path.exists(output_file):
 else:
     df_db = df_new
 
-df_final = df_db[df_db["language"]=="en_uk"][["F1","precision","mae_start","mae end","language","oui_threshold","method"]]
+df_final = df_db[df_db["language"]=="fr"][["F1","precision","mae_start","mae end","language","oui_threshold","method"]]
 
 print(df_final)
 

@@ -17,11 +17,7 @@ A New Unsupervised Multilingual Acoustic Laughter Segmentation Method
 ├── get_embeddings.py        # Script to generate embeddings from raw audio
 ├── remove_voice_music.py    # Preprocessing: removing background music
 ├── remove_voice.py          # Preprocessing: isolating non-vocal components
-├── test_isolation.py        # Only test for Isolation Forest
-├── train_clusters.py        # Training clustering models
-├── train_isolation_all.py   # Training: Saves all files
-├── train_isolation_audioset.py # Training: Specifically on AudioSet/Friends/Kuznetsova
-├── train_isolation.py       # Training: Saves only test files
+├── main.py                  # Unified training and testing script
 ├── .gitignore               # Files to exclude from Git
 ├── requirements.txt         # Project dependencies
 ├── setup.sh                 # Environment setup script
@@ -98,15 +94,15 @@ Select the training script based on your storage and dataset needs:
 
 * **Save all files:** 
 ```bash
-  python train_isolation_all.py
+  python main.py --root_dir path/to/audio --labels_dir path/to/labels --task train_isolation_all
   ```
 
 * **Save only test files:** 
 ```bash
-  python train_isolation.py
+  python main.py --root_dir path/to/audio --labels_dir path/to/labels --task train_isolation
   ```
 
 * **Dataset specific (AudioSet/Friends/Kuznetsova):** 
 ```bash
-python train_isolation_audioset.py
+python main.py --root_dir path/to/audio --labels_dir path/to/labels --task train_isolation_audioset
 ```

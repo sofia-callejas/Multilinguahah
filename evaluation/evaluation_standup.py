@@ -5,19 +5,23 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import csv
-from laughter_detection.core.utils import load_preds
+import pickle
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("pred_root", type=str, help="Root path to predictions by language")
-    parser.add_argument("model_root", type=str, help="Root path to models by language")
-    parser.add_argument("gillick_root", type=str, help="Root path to predictions by language")
-    parser.add_argument("funnynet_root", type=str, help="Root path to models by language")
-    parser.add_argument("label_root", type=str, help="Root path to labels by language")
-    parser.add_argument("output_dir", type=str, help="Path to the output score directory")
-    parser.add_argument("iou_threshold", type=float, help="IoU threshold")
-    parser.add_argument("model_type", type=str, help="Model type, e.g., isolation")
+    parser.add_argument("pred_root", type=str)
+    parser.add_argument("model_root", type=str)
+    parser.add_argument("gillick_root", type=str)
+    parser.add_argument("funnynet_root", type=str)
+    parser.add_argument("label_root", type=str)
+    parser.add_argument("output_dir", type=str)
+    parser.add_argument("iou_threshold", type=float)
+    parser.add_argument("model_type", type=str)
     return parser.parse_args()
+
+def load_preds(path):
+    with open(path, "rb") as f:
+        return pickle.load(f)
 
 def convertir_en_tuples(liste_de_listes):
     return [tuple(pair) for pair in liste_de_listes]
@@ -76,33 +80,20 @@ def get_interval_accuracies(gt_segments, pred_segments, iou_threshold=0.5):
 
 if __name__=="__main__":
     args = parse_arguments()
-    pred_root = args.pred_root
-    model_root = args.model_root
-    gillick_root = args.gillick_root
-    funnynet_root = args.funnynet_root
-    label_root = args.label_root
-    output_dir = args.output_dir
-    iou_threshold = args.iou_threshold
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    languages = [d for d in os.listdir(label_root) if osp.isdir(osp.join(label_root,d))]
-    print("Found languages:", languages)
-
+    os.makedirs(args.output_dir, exist_ok=True)
+    languages = [d for d in os.listdir(args.label_root) if osp.isdir(osp.join(args.label_root,d))]
     all_true, all_pred, all_baseline, all_funnynet, all_gillick = [], [], [], [], []
 
     for lang in languages:
         if lang == "es_ch":
             continue
-        print(f"Processing language: {lang}")
-        pred_dir = osp.join(pred_root, lang,"byola-f","isolation")
-        model_dir = osp.join(model_root, lang)
-        label_dir = osp.join(label_root, lang, "audio", "labels")
-        gillick_dir = osp.join(gillick_root, lang,"raw","gillick")
-        funnynet_dir = osp.join(funnynet_root, lang, "byola", "funnynet")
+        pred_dir = osp.join(args.pred_root, lang,"byola-f","isolation")
+        model_dir = osp.join(args.model_root, lang)
+        label_dir = osp.join(args.label_root, lang, "audio", "labels")
+        gillick_dir = osp.join(args.gillick_root, lang,"raw","gillick")
+        funnynet_dir = osp.join(args.funnynet_root, lang, "byola", "funnynet")
 
         if not osp.exists(pred_dir) or not osp.exists(model_dir) or not osp.exists(label_dir):
-            print(f"Skipping {lang}, missing directories")
             continue
 
         pred_files = sorted(os.listdir(pred_dir))
@@ -119,7 +110,6 @@ if __name__=="__main__":
 
         common_keys = set(pred_dict.keys()) & set(label_dict.keys()) & set(model_dict.keys())
         if len(common_keys)==0:
-            print(f"No common files for {lang}, skipping...")
             continue
 
         for key in sorted(common_keys):
@@ -156,7 +146,7 @@ if __name__=="__main__":
 
     plt.figure(figsize=(10,6))
     for name, segments in methods.items():
-        df = get_interval_accuracies(all_true, segments, iou_threshold=iou_threshold)
+        df = get_interval_accuracies(all_true, segments, iou_threshold=args.iou_threshold)
         lengths = df["length"].values
         corrects = df["correct"].values
         sorted_idx = np.argsort(lengths)
@@ -167,13 +157,13 @@ if __name__=="__main__":
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(osp.join(output_dir,"continuous_intervals.png"), dpi=300)
-    plt.show()
+    plt.savefig(osp.join(args.output_dir,"continuous_intervals.png"), dpi=300)
+    plt.close()
 
     interval_bins = [(0,1),(1,10)]
     plt.figure(figsize=(8,5))
     for name, segments in methods.items():
-        df = get_interval_accuracies(all_true, segments, iou_threshold=iou_threshold)
+        df = get_interval_accuracies(all_true, segments, iou_threshold=args.iou_threshold)
         f1_scores = []
         for start,end in interval_bins:
             bin_df = df[(df["length"]>=start)&(df["length"]<end)]
@@ -190,8 +180,8 @@ if __name__=="__main__":
     plt.title("F1 Score by Interval Length (0-1s, 1-10s) Standup4AI IoU = 0.7")
     plt.grid(True, axis='y')
     plt.tight_layout()
-    plt.savefig(osp.join(output_dir,"f1_0-1_1-10s.png"), dpi=300)
-    plt.show()
+    plt.savefig(osp.join(args.output_dir,"f1_0-1_1-10s.png"), dpi=300)
+    plt.close()
 
     fixed_bins = [(0,0.5),(0.5,1),(1,1.5),(1.5,2),(2,2.5),(2.5,3),(3,3.5),(3.5,4)]
     bin_centers = np.array([(start + end) / 2 for start, end in fixed_bins])
@@ -200,7 +190,7 @@ if __name__=="__main__":
     bar_width = total_width / num_methods
     plt.figure(figsize=(10,6))
     for i, (name, segments) in enumerate(methods.items()):
-        df = get_interval_accuracies(all_true, segments, iou_threshold=iou_threshold)
+        df = get_interval_accuracies(all_true, segments, iou_threshold=args.iou_threshold)
         f1_scores = []
         for start,end in fixed_bins:
             bin_df = df[(df["length"]>=start)&(df["length"]<end)]
@@ -213,7 +203,6 @@ if __name__=="__main__":
                 _, _, _, f1 = calculate_metrics(TP, FP, FN)
                 f1_scores.append(f1)
         current_color = colors.get(name, "gray")
-
         offset = (i - (num_methods - 1) / 2) * bar_width
         plt.bar(bin_centers + offset, f1_scores, width=bar_width, 
             label=name, color=current_color, alpha=0.9)
@@ -223,6 +212,5 @@ if __name__=="__main__":
     plt.title("F1 Score vs Interval Length\nStandup4AI IoU = 0.7", fontsize=20)
     plt.legend(loc='upper left', fontsize=15)
     plt.tight_layout()
-    plt.savefig(osp.join(output_dir,"f1_fixed_bins.png"), dpi=300)
-    plt.show()
-
+    plt.savefig(osp.join(args.output_dir,"f1_fixed_bins.png"), dpi=300)
+    plt.close()
